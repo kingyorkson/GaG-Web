@@ -4,7 +4,7 @@ struct User: Identifiable, Codable, Hashable {
     let id: String
     var username: String
     var avatarUrl: String?
-    var status: UserStatus
+    var status: UserStatus = .offline
     var isFriend: Bool = false
 
     enum UserStatus: String, Codable {
