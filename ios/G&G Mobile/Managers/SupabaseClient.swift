@@ -5,7 +5,7 @@ class SupabaseClient: NSObject {
     static let shared = SupabaseClient()
 
     private let baseURL = "https://cqohfidpjiudduoqcppv.supabase.co"
-    private let anonKey = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImNxb2hmaWRwaml1ZGR1b3FjcHB2Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3MzMxMTE3NjIsImV4cCI6MjA0ODY4Nzc2Mn0.8LxPc2nUkksoV6fKqyPp72S42C8SKqIuy0CQyGQXGYA"
+    private let anonKey = "sb_publishable_6y_g2CP3d7FTesjvTGIqXg_gy2NH6yW"
 
     enum APIError: Error {
         case invalidURL
