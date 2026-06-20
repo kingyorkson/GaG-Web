@@ -15,11 +15,20 @@ export class AuthScene extends Phaser.Scene {
     this.returnScene = data.returnScene || 'MenuScene';
     this.authOnly = data.authOnly || false;
     this.webAuth = data.webAuth || false;
+    this.discordCallback = data.discordCallback || false;
   }
 
-  create() {
+  async create() {
     this.authSystem = new AuthSystem();
     this.setupAuthListener();
+
+    if (this.discordCallback) {
+      this.cameras.main.setBackgroundColor(COLORS.background);
+      this.showProgressBar('Completing Discord sign in...');
+      this.waitingForDiscord = true;
+      await this.handleDiscordCallback();
+      return;
+    }
 
     this.cameras.main.setBackgroundColor(COLORS.background);
     this.createAuthScreen();
@@ -454,30 +463,16 @@ export class AuthScene extends Phaser.Scene {
       return;
     }
 
-    const popup = window.open('', '_blank');
-
     const result = await this.authSystem.loginWithDiscord();
     if (!result.success) {
-      if (popup && !popup.closed) popup.close();
+      localStorage.removeItem('gag_discord_hash');
       this.hideProgressBar();
       this.showError(result.error || 'Failed to start Discord auth');
       return;
     }
 
-    const hash = await this.browser.open(result.url, popup);
-
-    if (hash) {
-      const q = new URLSearchParams(hash.replace('#', '?'));
-      const at = q.get('access_token');
-      const rt = q.get('refresh_token');
-      if (at && rt) {
-        await supabase.auth.setSession({ access_token: at, refresh_token: rt });
-      }
-      this.handleDiscordCallback();
-    } else {
-      this.hideProgressBar();
-      this.showError('Authentication was cancelled');
-    }
+    localStorage.setItem('gag_discord_hash', 'waiting');
+    window.location.href = result.url;
   }
 
   async handleDiscordCallback() {

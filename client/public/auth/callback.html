@@ -3,22 +3,29 @@
 <head><title>Authentication</title></head>
 <body style="display:flex;align-items:center;justify-content:center;height:100vh;margin:0;background:#1a1a2e;color:#fff;font-family:Arial;flex-direction:column;">
   <h2>Authentication successful!</h2>
-  <p>You can close this tab and return to the game.</p>
+  <p>Returning to the game...</p>
   <p id="status" style="color:#aaa;">Processing...</p>
   <script>
-    const hash = window.location.hash;
-    const params = new URLSearchParams(hash.replace('#', '?'));
-    const accessToken = params.get('access_token');
+    var hash = window.location.hash;
+    var params = new URLSearchParams(hash.replace('#', '?'));
+    var accessToken = params.get('access_token');
     if (accessToken) {
       if (window.opener) {
         window.opener.postMessage({ type: 'supabase-auth', hash: hash }, window.location.origin);
+        document.getElementById('status').textContent = 'Session transferred.';
+        setTimeout(function() { window.close(); }, 2000);
+      } else {
+        try {
+          localStorage.setItem('gag_discord_hash', hash);
+          document.getElementById('status').textContent = 'Stored session. Redirecting...';
+          var base = window.location.pathname.replace(/\/auth\/callback\.html$/, '') || '/';
+          setTimeout(function() { window.location.href = base; }, 1500);
+        } catch(e) {
+          document.getElementById('status').textContent = 'Error: ' + e.message;
+        }
       }
-      document.getElementById('status').textContent = '✓ Session transferred to game.';
     } else {
       document.getElementById('status').textContent = 'No session found. Try again.';
-    }
-    if (window.opener) {
-      setTimeout(() => window.close(), 3000);
     }
   </script>
 </body>
