@@ -70,7 +70,7 @@ class AuthManager: ObservableObject {
         return true
     }
 
-    func signInWithQRCode(token: String) async -> Result<Void, String> {
+    func signInWithQRCode(token: String) async -> Result<Void, SupabaseClient.APIError> {
         let result = await supabase.authenticateWithQR(token: token)
         switch result {
         case .success(let user):

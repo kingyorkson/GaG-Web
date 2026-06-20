@@ -87,7 +87,7 @@ struct SignInView: View {
                                     status: .online
                                 )
                             case .failure(let error):
-                                errorMessage = error
+                                errorMessage = error.localizedDescription
                                 showError = true
                             }
                         }
