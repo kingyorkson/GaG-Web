@@ -1,0 +1,68 @@
+name: Build iOS IPA
+
+on:
+  push:
+    branches: [ios-build]
+  workflow_dispatch:
+
+jobs:
+  build-ios:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Install web dependencies
+        run: |
+          cd client
+          npm ci
+
+      - name: Build web app
+        run: |
+          cd client
+          npx vite build --outDir ../web/dist
+        env:
+          VITE_SERVER_URL: ${{ secrets.VITE_SERVER_URL || 'http://localhost:3001' }}
+
+      - name: Install iOS dependencies
+        run: |
+          cd ios
+          npm ci
+
+      - name: Add iOS platform
+        run: |
+          cd ios
+          npx cap add ios
+
+      - name: Sync Capacitor
+        run: |
+          cd ios
+          npx cap sync ios
+
+      - name: Build unsigned .app
+        run: |
+          cd ios/ios/App
+          xcodebuild build \
+            -workspace App.xcworkspace \
+            -scheme App \
+            -configuration Release \
+            -derivedDataPath build \
+            CODE_SIGN_IDENTITY="" \
+            CODE_SIGNING_ALLOWED=NO
+
+      - name: Package unsigned IPA
+        run: |
+          mkdir -p Payload
+          cp -r ios/ios/App/build/Build/Products/Release-iphoneos/App.app Payload/
+          zip -r Growing_Gardening_2D.ipa Payload/
+          rm -rf Payload
+
+      - name: Upload IPA artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: Growing_Gardening_2D.ipa
+          path: Growing_Gardening_2D.ipa

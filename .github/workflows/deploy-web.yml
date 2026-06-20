@@ -30,8 +30,6 @@ jobs:
         run: |
           cd client
           npx vite build --outDir ../web/dist
-        env:
-          VITE_SERVER_URL: ${{ secrets.VITE_SERVER_URL || 'http://localhost:3001' }}
 
       - name: Upload to GitHub Pages
         uses: actions/upload-pages-artifact@v3
