@@ -20,7 +20,7 @@ function createWindow() {
     icon: path.join(__dirname, 'resources', 'icon.png'),
   });
 
-  mainWindow.loadFile(path.join(__dirname, '..', 'web', 'dist', 'index.html'));
+  mainWindow.loadFile(path.join(__dirname, 'webdist', 'index.html'));
 
   mainWindow.on('closed', () => {
     mainWindow = null;

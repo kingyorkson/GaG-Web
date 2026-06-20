@@ -5,8 +5,9 @@
   "author": "Growing Gardening Team",
   "main": "main.js",
   "scripts": {
-    "start": "electron .",
-    "build": "electron-builder"
+    "start": "npm run prebuild && electron .",
+    "prebuild": "powershell -Command \"if (Test-Path 'webdist') { Remove-Item -Recurse -Force 'webdist' }; Copy-Item -Recurse '../web/dist' 'webdist'\"",
+    "build": "npm run prebuild && electron-builder"
   },
   "devDependencies": {
     "electron": "^31.3.1",
@@ -22,7 +23,7 @@
     "files": [
       "main.js",
       "preload.js",
-      "../web/dist/**/*"
+      "webdist/**/*"
     ],
     "win": {
       "target": "nsis",

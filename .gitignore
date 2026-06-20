@@ -7,5 +7,6 @@ Thumbs.db
 client/dist/
 web/dist/
 windows/dist/
+windows/webdist/
 ios/ios/
 android/android/
