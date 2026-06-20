@@ -522,6 +522,7 @@ export class AuthScene extends Phaser.Scene {
           this.startDiscordAuth();
         });
       } else {
+        await this.authSystem.linkDiscordAccount(profile.username, discordUsername);
         this.showSuccess('Authenticated with Discord!');
         this.authSystem.saveUser({ id: user.id, username: profile.username, type: 'discord' });
         this.progressComplete(() => this.scene.start(this.returnScene));
@@ -602,6 +603,8 @@ export class AuthScene extends Phaser.Scene {
       }).eq('id', user.id);
 
       if (error) { this.showError(error.message); return; }
+
+      await this.authSystem.linkDiscordAccount(finalUsername, discordUsername);
 
       this.showSuccess('Account created!');
       this.authSystem.saveUser({ id: user.id, username: finalUsername, type: 'discord' });
