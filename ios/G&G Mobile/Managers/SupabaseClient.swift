@@ -29,6 +29,7 @@ class SupabaseClient: NSObject {
         request.httpMethod = "POST"
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
         request.setValue(anonKey, forHTTPHeaderField: "apikey")
+        request.setValue("Bearer \(anonKey)", forHTTPHeaderField: "Authorization")
         let body = ["token_text": token]
         request.httpBody = try? JSONSerialization.data(withJSONObject: body)
 
