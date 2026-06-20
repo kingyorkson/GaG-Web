@@ -12,7 +12,7 @@ class AppState: ObservableObject {
     @Published var showSidebar = true
 
     @Published var friends: [User] = []
-    @Published var groups: [Group] = []
+    @Published var chatGroups: [ChatGroup] = []
     @Published var servers: [Server] = []
     @Published var pendingCalls: [Call] = []
     @Published var activeCall: Call?
@@ -21,6 +21,9 @@ class AppState: ObservableObject {
     let chatManager = ChatManager()
     let callManager = CallManager()
     let serverManager = ServerManager()
+
+    var currentUsername: String? { authManager.currentUsername }
+    var currentUserId: String? { authManager.currentUserId }
 
     enum Tab: String, CaseIterable {
         case friends
@@ -37,9 +40,9 @@ class AppState: ObservableObject {
             User(id: "user5", username: "HarvestKing", status: .online),
             User(id: "user6", username: "BloomMaster", status: .idle),
         ]
-        groups = [
-            Group(id: "group1", name: "Garden Club", members: ["user1", "user2", "user4"]),
-            Group(id: "group2", name: "Rare Seeds Team", members: ["user1", "user3", "user5", "user6"]),
+        chatGroups = [
+            ChatGroup(id: "group1", name: "Garden Club", members: ["user1", "user2", "user4"]),
+            ChatGroup(id: "group2", name: "Rare Seeds Team", members: ["user1", "user3", "user5", "user6"]),
         ]
         servers = [
             Server(id: "srv1", name: "Verdant Valley", memberCount: 24, playerCount: 8),

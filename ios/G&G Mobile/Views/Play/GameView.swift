@@ -22,6 +22,7 @@ struct GameView: View {
                             appState.callManager.hangUp()
                             appState.activeCall = nil
                             dismiss()
+                            setOrientation(.portrait)
                         }) {
                             HStack(spacing: 6) {
                                 Image(systemName: "chevron.left")
@@ -52,19 +53,18 @@ struct GameView: View {
         }
         .statusBar(hidden: true)
         .onAppear {
-            UIDevice.current.setValue(UIInterfaceOrientation.landscapeLeft.rawValue, forKey: "orientation")
-            UINavigationController.attemptRotationToDeviceOrientation()
-
+            setOrientation(.landscapeLeft)
             DispatchQueue.main.asyncAfter(deadline: .now() + 5) {
                 withAnimation(.easeInOut(duration: 1.5)) {
                     backButtonOpacity = 0.0
                 }
             }
         }
-        .onDisappear {
-            UIDevice.current.setValue(UIInterfaceOrientation.portrait.rawValue, forKey: "orientation")
-            UINavigationController.attemptRotationToDeviceOrientation()
-        }
+    }
+
+    func setOrientation(_ orientation: UIInterfaceOrientation) {
+        guard let windowScene = UIApplication.shared.connectedScenes.first as? UIWindowScene else { return }
+        windowScene.requestGeometryUpdate(.iOS(interfaceOrientations: orientation == .landscapeLeft ? .landscape : .portrait))
     }
 
     var gameURL: URL {

@@ -78,7 +78,8 @@ struct MainTabView: View {
 
             Button(action: { showAccountMenu = true }) {
                 HStack(spacing: 4) {
-                    Text(appState.currentUsername?.prefix(2).uppercased() ?? "?")
+                    let name = appState.currentUsername ?? "?"
+                    Text(String(name.prefix(2).uppercased()))
                         .font(.caption)
                         .foregroundColor(.white)
                         .frame(width: 36, height: 36)
@@ -93,22 +94,21 @@ struct MainTabView: View {
         }
         .background(Color(hex: "151530"))
         .sheet(isPresented: $showAccountMenu) {
-            AccountMenuView()
+            AccountMenuView().environmentObject(appState)
         }
     }
 
+    @ViewBuilder
     var mainContent: some View {
-        Group {
-            if selectedSection == "friends" {
-                FriendsTabView()
-            } else if selectedSection == "play" {
-                PlayMenuView()
-            } else if selectedSection.hasPrefix("server_") {
-                let serverId = String(selectedSection.dropFirst("server_".count))
-                ServerDetailView(serverId: serverId)
-            } else {
-                FriendsTabView()
-            }
+        if selectedSection == "friends" {
+            FriendsTabView()
+        } else if selectedSection == "play" {
+            PlayMenuView()
+        } else if selectedSection.hasPrefix("server_") {
+            let serverId = String(selectedSection.dropFirst("server_".count))
+            ServerDetailView(serverId: serverId)
+        } else {
+            FriendsTabView()
         }
     }
 

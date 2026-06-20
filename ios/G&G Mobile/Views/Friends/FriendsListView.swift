@@ -3,7 +3,7 @@ import SwiftUI
 struct FriendsListView: View {
     @EnvironmentObject var appState: AppState
     @State private var searchText = ""
-    @State private var selectedFriend: User?
+    @State private var chatRecipient: User?
 
     var filteredFriends: [User] {
         if searchText.isEmpty { return appState.friends }
@@ -28,23 +28,30 @@ struct FriendsListView: View {
             ScrollView {
                 LazyVStack(spacing: 6) {
                     ForEach(filteredFriends) { friend in
-                        Button(action: { selectedFriend = friend }) {
-                            FriendRowView(friend: friend)
-                        }
+                        FriendRowView(
+                            friend: friend,
+                            onChat: { chatRecipient = friend },
+                            onCall: {
+                                appState.callManager.startCall(from: appState.currentUserId ?? "", to: friend.id)
+                                appState.activeCall = appState.callManager.activeCall
+                            }
+                        )
                     }
                 }
                 .padding(.horizontal, 12)
             }
         }
         .background(Color(hex: "0f0f23"))
-        .sheet(item: $selectedFriend) { friend in
-            ChatView(friend: friend)
+        .sheet(item: $chatRecipient) { friend in
+            ChatView(friend: friend).environmentObject(appState)
         }
     }
 }
 
 struct FriendRowView: View {
     let friend: User
+    let onChat: () -> Void
+    let onCall: () -> Void
 
     var body: some View {
         HStack(spacing: 12) {
@@ -73,23 +80,23 @@ struct FriendRowView: View {
 
             Spacer()
 
-            Image(systemName: "message.fill")
-                .foregroundColor(Color(hex: "4ecca3"))
-                .font(.system(size: 14))
-                .padding(8)
-                .background(Color(hex: "4ecca3").opacity(0.15))
-                .cornerRadius(8)
+            Button(action: onChat) {
+                Image(systemName: "message.fill")
+                    .foregroundColor(Color(hex: "4ecca3"))
+                    .font(.system(size: 14))
+                    .padding(8)
+                    .background(Color(hex: "4ecca3").opacity(0.15))
+                    .cornerRadius(8)
+            }
 
-            Image(systemName: "phone.fill")
-                .foregroundColor(Color(hex: "4ecca3"))
-                .font(.system(size: 14))
-                .padding(8)
-                .background(Color(hex: "4ecca3").opacity(0.15))
-                .cornerRadius(8)
-                .onTapGesture {
-                    appState.callManager.startCall(from: "me", to: friend.id)
-                    appState.activeCall = appState.callManager.activeCall
-                }
+            Button(action: onCall) {
+                Image(systemName: "phone.fill")
+                    .foregroundColor(Color(hex: "4ecca3"))
+                    .font(.system(size: 14))
+                    .padding(8)
+                    .background(Color(hex: "4ecca3").opacity(0.15))
+                    .cornerRadius(8)
+            }
         }
         .padding(.vertical, 8)
         .padding(.horizontal, 12)

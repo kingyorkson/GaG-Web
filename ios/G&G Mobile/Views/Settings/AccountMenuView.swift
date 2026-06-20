@@ -9,11 +9,12 @@ struct AccountMenuView: View {
             List {
                 Section {
                     HStack {
+                        let name = appState.currentUsername ?? "?"
                         ZStack {
                             Circle()
                                 .fill(Color(hex: "4ecca3"))
                                 .frame(width: 50, height: 50)
-                            Text(appState.currentUsername?.prefix(2).uppercased() ?? "?")
+                            Text(String(name.prefix(2).uppercased()))
                                 .font(.title2)
                                 .fontWeight(.bold)
                                 .foregroundColor(.white)

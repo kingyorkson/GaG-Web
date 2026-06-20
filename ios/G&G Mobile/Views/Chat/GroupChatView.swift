@@ -2,7 +2,7 @@ import SwiftUI
 
 struct GroupChatView: View {
     @EnvironmentObject var appState: AppState
-    let group: Group
+    let group: ChatGroup
     @State private var messageText = ""
     @State private var messages: [Message] = []
 
@@ -23,7 +23,7 @@ struct GroupChatView: View {
                     .foregroundColor(Color(hex: "888888"))
 
                 Button(action: {
-                    appState.callManager.startGroupCall(from: "me", groupId: group.id)
+                    appState.callManager.startGroupCall(from: appState.currentUserId ?? "", groupId: group.id)
                     appState.activeCall = appState.callManager.activeCall
                 }) {
                     Image(systemName: "phone.fill")
@@ -46,7 +46,7 @@ struct GroupChatView: View {
                     }
                     .padding()
                 }
-                .onChange(of: messages.count) { _ in
+                .onChange(of: messages.count) {
                     if let last = messages.last {
                         withAnimation { proxy.scrollTo(last.id, anchor: .bottom) }
                     }

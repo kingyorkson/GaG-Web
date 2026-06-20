@@ -2,10 +2,9 @@ import SwiftUI
 
 struct ContentView: View {
     @EnvironmentObject var appState: AppState
-    @State private var showOnboarding = false
 
     var body: some View {
-        Group {
+        SwiftUI.Group {
             if !appState.hasCompletedOnboarding {
                 WelcomePageView()
             } else if !appState.isLoggedIn {

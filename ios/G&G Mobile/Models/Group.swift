@@ -1,12 +1,12 @@
 import Foundation
 
-struct Group: Identifiable, Codable, Hashable {
+struct ChatGroup: Identifiable, Codable, Hashable {
     let id: String
     var name: String
     var members: [String]
     var messages: [Message] = []
 
-    static func == (lhs: Group, rhs: Group) -> Bool {
+    static func == (lhs: ChatGroup, rhs: ChatGroup) -> Bool {
         lhs.id == rhs.id
     }
 

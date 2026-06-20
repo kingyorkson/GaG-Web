@@ -25,7 +25,7 @@ struct ChatView: View {
                 Spacer()
 
                 Button(action: {
-                    appState.callManager.startCall(from: "me", to: friend.id)
+                    appState.callManager.startCall(from: appState.currentUserId ?? "", to: friend.id)
                     appState.activeCall = appState.callManager.activeCall
                 }) {
                     Image(systemName: "phone.fill")
@@ -48,7 +48,7 @@ struct ChatView: View {
                     }
                     .padding()
                 }
-                .onChange(of: messages.count) { _ in
+                .onChange(of: messages.count) {
                     if let last = messages.last {
                         withAnimation { proxy.scrollTo(last.id, anchor: .bottom) }
                     }

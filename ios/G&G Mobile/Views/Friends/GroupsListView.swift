@@ -2,12 +2,12 @@ import SwiftUI
 
 struct GroupsListView: View {
     @EnvironmentObject var appState: AppState
-    @State private var selectedGroup: Group?
+    @State private var selectedGroup: ChatGroup?
 
     var body: some View {
         ScrollView {
             LazyVStack(spacing: 8) {
-                ForEach(appState.groups) { group in
+                ForEach(appState.chatGroups) { group in
                     Button(action: { selectedGroup = group }) {
                         GroupRowView(group: group)
                     }
@@ -18,13 +18,13 @@ struct GroupsListView: View {
         }
         .background(Color(hex: "0f0f23"))
         .sheet(item: $selectedGroup) { group in
-            GroupChatView(group: group)
+            GroupChatView(group: group).environmentObject(appState)
         }
     }
 }
 
 struct GroupRowView: View {
-    let group: Group
+    let group: ChatGroup
 
     var body: some View {
         HStack(spacing: 12) {
