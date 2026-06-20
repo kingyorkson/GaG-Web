@@ -212,3 +212,49 @@ CREATE INDEX IF NOT EXISTS idx_friends_friend_id ON friends(friend_id);
 CREATE INDEX IF NOT EXISTS idx_friend_requests_to ON friend_requests(to_user_id);
 CREATE INDEX IF NOT EXISTS idx_friend_requests_from ON friend_requests(from_user_id);
 CREATE INDEX IF NOT EXISTS idx_servers_type ON servers(type);
+
+-- QR auth tokens for mobile sign-in
+CREATE TABLE IF NOT EXISTS qr_auth_tokens (
+  id SERIAL PRIMARY KEY,
+  token TEXT UNIQUE NOT NULL,
+  user_id UUID REFERENCES auth.users(id) ON DELETE CASCADE,
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  expires_at TIMESTAMPTZ DEFAULT (NOW() + INTERVAL '5 minutes'),
+  used BOOLEAN DEFAULT FALSE
+);
+
+ALTER TABLE qr_auth_tokens ENABLE ROW LEVEL SECURITY;
+
+DO $$ BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE tablename = 'qr_auth_tokens' AND policyname = 'authenticated_insert') THEN
+    CREATE POLICY authenticated_insert ON qr_auth_tokens FOR INSERT WITH CHECK (auth.role() = 'authenticated');
+  END IF;
+END $$;
+
+-- RPC: authenticate with QR token (no auth required - token is the key)
+CREATE OR REPLACE FUNCTION authenticate_with_qr(token_text TEXT)
+RETURNS JSONB
+LANGUAGE plpgsql SECURITY DEFINER
+SET search_path = public
+AS $$
+DECLARE
+  result JSONB;
+BEGIN
+  SELECT jsonb_build_object(
+    'id', p.id,
+    'username', p.username,
+    'auth_type', p.auth_type
+  ) INTO result
+  FROM qr_auth_tokens q
+  JOIN profiles p ON p.id = q.user_id
+  WHERE q.token = token_text
+    AND q.used = FALSE
+    AND q.expires_at > NOW();
+
+  IF result IS NOT NULL THEN
+    UPDATE qr_auth_tokens SET used = TRUE WHERE token = token_text;
+  END IF;
+
+  RETURN result;
+END;
+$$;

@@ -5,6 +5,7 @@ import { AuthSystem } from '../systems/AuthSystem.js';
 import { SaveSystem } from '../systems/SaveSystem.js';
 import { NetworkSystem } from '../systems/NetworkSystem.js';
 import { supabase } from '../systems/SupabaseClient.js';
+import QRCode from 'qrcode';
 
 const DEPTH = {
   BG: 0,
@@ -103,6 +104,10 @@ export class MenuScene extends Phaser.Scene {
 
     this.userBtn = null;
     this.profileBtn = null;
+
+    this.mobileQRBtn = new RecolorableButton(this, GAME_WIDTH - 160, GAME_HEIGHT - 50, 140, 35, 'Mobile QR', COLORS.buttonGray, () => {
+      this.openQRCodeModal();
+    });
   }
 
   async loadUsers() {
@@ -196,6 +201,77 @@ export class MenuScene extends Phaser.Scene {
 
     const closeBtn = new RecolorableButton(this, px + pw - 50, py + 10, 35, 35, 'X', COLORS.danger, () => {
       this.cleanupOverlay([overlay, panel, titleText, accountsContainer, addBtn, closeBtn]);
+    });
+  }
+
+  async openQRCodeModal() {
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) {
+      this.showMessage('Sign in first to use Mobile QR');
+      return;
+    }
+
+    const overlay = this.add.graphics().setDepth(DEPTH.OVERLAY + 10);
+    overlay.fillStyle(0x000000, 0.8);
+    overlay.fillRect(0, 0, GAME_WIDTH, GAME_HEIGHT);
+
+    const pw = 400;
+    const ph = 420;
+    const px = (GAME_WIDTH - pw) / 2;
+    const py = (GAME_HEIGHT - ph) / 2;
+
+    const panel = this.add.graphics().setDepth(DEPTH.OVERLAY + 10);
+    panel.fillStyle(COLORS.tabletBg, 0.95);
+    panel.fillRoundedRect(px, py, pw, ph, 15);
+    panel.lineStyle(2, COLORS.tabletBorder, 1);
+    panel.strokeRoundedRect(px, py, pw, ph, 15);
+
+    const titleText = this.add.text(GAME_WIDTH / 2, py + 25, 'Scan QR Code for Mobile App', {
+      fontSize: '18px', color: '#ffffff', fontFamily: 'Arial', fontStyle: 'bold',
+    }).setOrigin(0.5).setDepth(DEPTH.OVERLAY + 20);
+
+    const token = crypto.randomUUID();
+
+    const { error: insertError } = await supabase
+      .from('qr_auth_tokens')
+      .insert({ token, user_id: user.id });
+
+    if (insertError) {
+      this.showMessage('Failed to generate QR code');
+      this.cleanupOverlay([overlay, panel, titleText]);
+      return;
+    }
+
+    const qrDataUrl = await QRCode.toDataURL(token, {
+      width: 256,
+      margin: 2,
+      color: { dark: '#4ecca3', light: '#1a1a2e' },
+    });
+
+    const qrImg = this.add.image(GAME_WIDTH / 2, py + 170, 'qr_temp');
+    qrImg.setDepth(DEPTH.OVERLAY + 20);
+
+    const tempImg = new Image();
+    tempImg.src = qrDataUrl;
+    tempImg.onload = () => {
+      if (this.textures.exists('qr_temp')) this.textures.remove('qr_temp');
+      this.textures.addImage('qr_temp', tempImg);
+      qrImg.setTexture('qr_temp');
+      qrImg.setDisplaySize(220, 220);
+    };
+
+    const hint = this.add.text(GAME_WIDTH / 2, py + 300, 'Open G&G Mobile on your iPhone\nand tap Scan QR Code', {
+      fontSize: '14px', color: '#aaaaaa', fontFamily: 'Arial',
+      align: 'center',
+    }).setOrigin(0.5).setDepth(DEPTH.OVERLAY + 20);
+
+    const expireText = this.add.text(GAME_WIDTH / 2, py + 350, 'Expires in 5 minutes', {
+      fontSize: '12px', color: '#888888', fontFamily: 'Arial',
+    }).setOrigin(0.5).setDepth(DEPTH.OVERLAY + 20);
+
+    const closeBtn = new RecolorableButton(this, px + pw - 50, py + 10, 35, 35, 'X', COLORS.danger, () => {
+      if (this.textures.exists('qr_temp')) this.textures.remove('qr_temp');
+      this.cleanupOverlay([overlay, panel, titleText, qrImg, hint, expireText, closeBtn]);
     });
   }
 
@@ -358,6 +434,14 @@ export class MenuScene extends Phaser.Scene {
   openFriendsMenu() {
     if (!this.currentUser) return;
     this.scene.start('TabletScene', { section: 'friends', user: this.currentUser });
+  }
+
+  showMessage(msg) {
+    const text = this.add.text(GAME_WIDTH / 2, GAME_HEIGHT - 90, msg, {
+      fontSize: '14px', color: '#4ecca3', fontFamily: 'Arial',
+      backgroundColor: '#00000088', padding: { x: 8, y: 4 },
+    }).setOrigin(0.5).setDepth(DEPTH.OVERLAY + 50);
+    this.time.delayedCall(2000, () => text.destroy());
   }
 
   setupGamepad() {

@@ -10,7 +10,8 @@
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.108.2",
-    "phaser": "^3.80.1"
+    "phaser": "^3.80.1",
+    "qrcode": "^1.5.4"
   },
   "devDependencies": {
     "vite": "^5.4.2"
