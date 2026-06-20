@@ -1,0 +1,14 @@
+{
+  "appId": "com.growinggardening.app",
+  "appName": "Growing & Gardening 2D",
+  "webDir": "../web/dist",
+  "bundledWebRuntime": false,
+  "server": {
+    "androidScheme": "https"
+  },
+  "plugins": {
+    "Gamepad": {
+      "enabled": true
+    }
+  }
+}

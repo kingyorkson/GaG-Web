@@ -1,0 +1,17 @@
+{
+  "name": "growing-gardening-android",
+  "version": "1.0.0",
+  "private": true,
+  "scripts": {
+    "build": "cap copy && cap sync",
+    "open": "cap open android",
+    "run": "cap run android"
+  },
+  "dependencies": {
+    "@capacitor/core": "^6.1.2",
+    "@capacitor/android": "^6.1.2"
+  },
+  "devDependencies": {
+    "@capacitor/cli": "^6.1.2"
+  }
+}

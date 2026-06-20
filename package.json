@@ -1,0 +1,22 @@
+{
+  "name": "growing-and-gardening-2d",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Growing and Gardening 2D - A multiplayer gardening game",
+  "scripts": {
+    "client:dev": "cd client && npx vite",
+    "client:build": "cd client && npx vite build",
+    "server:dev": "cd server && node src/index.js",
+    "electron:dev": "cd windows && npx electron .",
+    "ios:dev": "cd ios && npx cap run ios",
+    "build:web": "cd client && npx vite build --outDir ../web/dist",
+    "build:windows": "cd client && npx vite build && cd ../windows && npx electron-builder",
+    "build:ios": "cd client && npx vite build && cd ../ios && npx cap copy && npx cap sync"
+  },
+  "workspaces": [
+    "client",
+    "server",
+    "windows",
+    "ios"
+  ]
+}
