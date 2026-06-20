@@ -9,7 +9,12 @@ export class AuthSystem {
         email,
         password,
       });
-      if (error) return { success: false, error: 'Invalid username or password' };
+      if (error) {
+        if (error.message?.includes('Email not confirmed') || error.message?.includes('email_not_confirmed')) {
+          return { success: false, error: 'Account not yet active. Check your email or ask an admin.' };
+        }
+        return { success: false, error: 'Invalid username or password' };
+      }
       return { success: true, user: this.formatUser(data.user) };
     } catch {
       return { success: false, error: 'Server unreachable' };
@@ -25,10 +30,19 @@ export class AuthSystem {
         options: { data: { username, auth_type: 'guest' } },
       });
       if (error) {
-        if (error.message.includes('already')) {
+        if (error.message?.includes('already')) {
           return { success: false, error: 'Username is not available' };
         }
+        if (error.message?.includes('weak') || error.message?.includes('not long enough')) {
+          return { success: false, error: 'Password must be at least 8 characters with uppercase, lowercase, number, and symbol' };
+        }
+        if (error.message?.includes('rate') || error.message?.includes('too many')) {
+          return { success: false, error: 'Too many attempts. Please wait a minute and try again.' };
+        }
         return { success: false, error: error.message };
+      }
+      if (!data.session && data.user) {
+        return { success: false, error: 'Account created but email confirmation is required. Ask an admin to disable "Confirm email" in Supabase Auth settings.' };
       }
       return { success: true, user: this.formatUser(data.user) };
     } catch {
@@ -88,9 +102,9 @@ export class AuthSystem {
     };
   }
 
-  getSavedUsers() {
-    const session = supabase.auth.getSession();
-    const user = session ? this.formatUser(session.user) : null;
+  async getSavedUsers() {
+    const { data } = await supabase.auth.getSession();
+    const user = data?.session?.user ? this.formatUser(data.session.user) : null;
     return user ? [user] : [];
   }
 

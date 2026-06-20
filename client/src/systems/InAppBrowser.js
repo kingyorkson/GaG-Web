@@ -9,23 +9,24 @@ export class InAppBrowser {
     return new Promise((resolve) => {
       this.authResolve = resolve;
       if (this.isElectron) {
-        this.openElectron(url);
+        this.openExternal(url);
       } else if (this.isIOS) {
         this.openIOS(url);
       } else {
-        this.openWeb(url);
+        this.openTab(url);
       }
     });
   }
 
-  openElectron(url) {
-    window.electronAPI.openBrowser(url);
-    window.electronAPI.onAuthCallback((hash) => {
+  openExternal(url) {
+    window.electronAPI.minimizeWindow();
+    window.electronAPI.openAuthUrl(url).then((hash) => {
+      window.electronAPI.restoreWindow();
       this.resolve(hash);
     });
   }
 
-  openWeb(url) {
+  openTab(url) {
     const popup = window.open(url, '_blank');
     const handler = (event) => {
       if (event.data?.type === 'supabase-auth' && event.origin === window.location.origin) {
@@ -57,17 +58,16 @@ export class InAppBrowser {
     });
   }
 
-  resolve(hash) {
+  resolve(data) {
     if (this.authResolve) {
-      this.authResolve(hash);
+      this.authResolve(data);
       this.authResolve = null;
     }
-    this.close();
   }
 
   close() {
-    if (this.isElectron) {
-      window.electronAPI.closeBrowser();
+    if (this.isElectron && window.electronAPI.closeAuthUrl) {
+      window.electronAPI.closeAuthUrl();
     }
   }
 }

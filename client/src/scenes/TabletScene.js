@@ -45,12 +45,11 @@ export class TabletScene extends Phaser.Scene {
   createTabButtons() {
     const b = this.bounds;
     const tabY = b.y + 50;
-    const tabW = (b.w - 40) / 3;
+    const tabW = (b.w - 30) / 2;
 
     this.tabs = {
       seeds: new RecolorableButton(this, b.x + 10, tabY, tabW, 35, 'Seeds', COLORS.buttonGray, () => this.switchTab('seeds')),
       sell: new RecolorableButton(this, b.x + 15 + tabW, tabY, tabW, 35, 'Sell', COLORS.buttonGray, () => this.switchTab('sell')),
-      inventory: new RecolorableButton(this, b.x + 20 + tabW * 2, tabY, tabW, 35, 'Inventory', COLORS.buttonGray, () => this.switchTab('inventory')),
     };
   }
 
@@ -83,7 +82,6 @@ export class TabletScene extends Phaser.Scene {
     switch (tab) {
       case 'seeds': this.showSeedsShop(); break;
       case 'sell': this.showSellMenu(); break;
-      case 'inventory': this.showInventoryView(); break;
     }
   }
 
@@ -245,41 +243,6 @@ export class TabletScene extends Phaser.Scene {
     this.switchTab('sell');
   }
 
-  showInventoryView() {
-    const b = this.bounds;
-    const items = this.userData.inventory || [];
-
-    this.add.text(GAME_WIDTH / 2, b.y + 80, 'Inventory', {
-      fontSize: '22px', color: '#ffffff', fontFamily: 'Arial', fontStyle: 'bold',
-    }).setOrigin(0.5);
-
-    if (items.length === 0) {
-      this.add.text(GAME_WIDTH / 2, GAME_HEIGHT / 2, 'Inventory is empty', {
-        fontSize: '16px', color: '#aaaaaa', fontFamily: 'Arial',
-      }).setOrigin(0.5);
-      return;
-    }
-
-    let yOff = b.y + 120;
-    const colCount = 4;
-    const slotW = (b.w - 40) / colCount;
-
-    items.forEach((item, idx) => {
-      const col = idx % colCount;
-      const row = Math.floor(idx / colCount);
-      const x = b.x + 15 + col * slotW;
-      const y = b.y + 120 + row * 55;
-
-      const slot = this.add.graphics();
-      slot.fillStyle(COLORS.inventorySlot, 1);
-      slot.fillRoundedRect(x, y, slotW - 8, 45, 5);
-
-      this.add.text(x + 5, y + 22, item.name, {
-        fontSize: '11px', color: '#ffffff', fontFamily: 'Arial',
-      }).setOrigin(0, 0.5);
-    });
-  }
-
   showConfirmDialog() {
     const overlay = this.add.graphics();
     overlay.fillStyle(0x000000, 0.7);
@@ -319,14 +282,12 @@ export class TabletScene extends Phaser.Scene {
   }
 
   clearContent() {
+    const keep = [this.cashText, this.homeBtn, ...Object.values(this.tabs)];
     this.children.each(child => {
-      if (child !== this.cashText && child !== this.homeBtn &&
-          !Object.values(this.tabs).includes(child) && child.depth < 200) {
-        if (child.type === 'Container') {
-          child.destroy();
-        } else if (child.type === 'Graphics' && !child === this.children.list[0] && !child === this.children.list[1]) {
-          child.destroy();
-        }
+      if (keep.includes(child)) return;
+      if (child.depth >= 200) return;
+      if (child.type === 'Container' || child.type === 'Graphics' || child.type === 'Text' || child.type === 'Zone') {
+        child.destroy();
       }
     });
     this.seedsContainer = null;

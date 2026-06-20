@@ -53,7 +53,11 @@ export class PreloadScene extends Phaser.Scene {
     seeds.forEach(s => this.load.image(`seed_${s}`, `assets/images/seeds/${s}.png`));
   }
 
+  init(data) {
+    this.autoLogin = data?.autoLogin || null;
+  }
+
   create() {
-    this.scene.start('MenuScene');
+    this.scene.start('MenuScene', { autoLogin: this.autoLogin });
   }
 }

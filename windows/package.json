@@ -6,7 +6,7 @@
   "main": "main.js",
   "scripts": {
     "start": "npm run prebuild && electron .",
-    "prebuild": "powershell -Command \"if (Test-Path 'webdist') { Remove-Item -Recurse -Force 'webdist' }; Copy-Item -Recurse '../web/dist' 'webdist'\"",
+    "prebuild": "powershell -Command \"if (Test-Path 'webdist') { Remove-Item -Recurse -Force 'webdist' }; Copy-Item -Recurse '../client/dist' 'webdist'\"",
     "build": "npm run prebuild && electron-builder"
   },
   "devDependencies": {

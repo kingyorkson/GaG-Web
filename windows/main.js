@@ -1,8 +1,12 @@
-const { app, BrowserWindow, BrowserView, ipcMain, screen } = require('electron');
+const { app, BrowserWindow, ipcMain, screen, shell } = require('electron');
 const path = require('path');
+const http = require('http');
+const net = require('net');
 
 let mainWindow;
-let authView;
+let authServer = null;
+let authResolve = null;
+let authTimer = null;
 
 function createWindow() {
   const { width, height } = screen.getPrimaryDisplay().workAreaSize;
@@ -27,6 +31,14 @@ function createWindow() {
     mainWindow = null;
   });
 
+  mainWindow.on('minimize', () => {
+    mainWindow.webContents.send('window-minimized');
+  });
+
+  mainWindow.on('restore', () => {
+    mainWindow.webContents.send('window-restored');
+  });
+
   mainWindow.webContents.on('before-input-event', (event, input) => {
     if (input.key === 'F11') {
       mainWindow.setFullScreen(!mainWindow.isFullScreen());
@@ -37,53 +49,93 @@ function createWindow() {
   setupAuthHandlers();
 }
 
+const CALLBACK_HTML = `<!DOCTYPE html><html><body><script>
+var h=window.location.hash.substring(1);
+fetch('/auth/done?'+h).then(function(){window.close()});
+<\/script></body></html>`;
+
+function getRandomPort() {
+  return new Promise((resolve, reject) => {
+    const server = net.createServer();
+    server.listen(0, '127.0.0.1', () => {
+      const port = server.address().port;
+      server.close(() => resolve(port));
+    });
+    server.on('error', reject);
+  });
+}
+
 function setupAuthHandlers() {
-  ipcMain.on('open-browser', (event, url) => {
-    if (authView) destroyAuthView();
+  ipcMain.handle('open-auth-url', async (event, url) => {
+    if (authTimer) clearTimeout(authTimer);
+    stopAuthServer();
 
-    const bounds = mainWindow.getBounds();
-    authView = new BrowserView({
-      webPreferences: { nodeIntegration: false, contextIsolation: true },
-    });
+    const port = await getRandomPort();
+    const callbackUrl = `http://127.0.0.1:${port}/auth/callback.html`;
+    const modifiedUrl = url.replace(/(redirect_to=)[^&]*/, '$1' + encodeURIComponent(callbackUrl));
 
-    mainWindow.setBrowserView(authView);
-    const margin = 40;
-    authView.setBounds({
-      x: margin, y: margin,
-      width: bounds.width - margin * 2,
-      height: bounds.height - margin * 2,
-    });
-    authView.setAutoResize({ width: true, height: true });
+    return new Promise((resolve) => {
+      authResolve = resolve;
+      authTimer = setTimeout(() => {
+        stopAuthServer();
+        resolve('');
+      }, 120000);
 
-    authView.webContents.loadURL(url);
+      authServer = http.createServer((req, res) => {
+        if (req.url.startsWith('/auth/callback.html')) {
+          res.writeHead(200, { 'Content-Type': 'text/html' });
+          res.end(CALLBACK_HTML);
+        } else if (req.url.startsWith('/auth/done?')) {
+          const hash = '#' + req.url.substring('/auth/done?'.length);
+          res.writeHead(200, { 'Content-Type': 'text/plain' });
+          res.end('ok');
+          stopAuthServer();
+          resolve(hash);
+        } else {
+          res.writeHead(404);
+          res.end();
+        }
+      });
 
-    authView.webContents.on('will-redirect', (event, redirectUrl) => {
-      checkAuthCallback(redirectUrl);
-    });
-    authView.webContents.on('did-navigate', (event, navUrl) => {
-      checkAuthCallback(navUrl);
+      authServer.listen(port, '127.0.0.1', () => {
+        shell.openExternal(modifiedUrl);
+      });
     });
   });
 
-  ipcMain.on('close-browser', () => {
-    destroyAuthView();
+  ipcMain.on('close-auth-server', () => {
+    if (authResolve) {
+      clearTimeout(authTimer);
+      authResolve('');
+      authResolve = null;
+    }
+    stopAuthServer();
+  });
+
+  ipcMain.on('minimize-window', () => {
+    if (mainWindow) {
+      mainWindow.minimize();
+    }
+  });
+
+  ipcMain.on('restore-window', () => {
+    if (mainWindow) {
+      if (mainWindow.isMinimized()) {
+        mainWindow.restore();
+      }
+      mainWindow.focus();
+    }
   });
 }
 
-function checkAuthCallback(url) {
-  if (!url || !url.includes('/auth/callback.html')) return;
-  const hash = url.split('#')[1];
-  if (hash) {
-    mainWindow.webContents.send('auth-callback', '#' + hash);
+function stopAuthServer() {
+  if (authServer) {
+    authServer.close();
+    authServer = null;
   }
-  destroyAuthView();
-}
-
-function destroyAuthView() {
-  if (authView) {
-    mainWindow.removeBrowserView(authView);
-    authView.webContents.destroy();
-    authView = null;
+  if (authTimer) {
+    clearTimeout(authTimer);
+    authTimer = null;
   }
 }
 

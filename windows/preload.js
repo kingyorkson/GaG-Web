@@ -2,9 +2,10 @@ const { contextBridge, ipcRenderer } = require('electron');
 
 contextBridge.exposeInMainWorld('electronAPI', {
   platform: 'windows',
-  openBrowser: (url) => ipcRenderer.send('open-browser', url),
-  closeBrowser: () => ipcRenderer.send('close-browser'),
-  onAuthCallback: (callback) => {
-    ipcRenderer.on('auth-callback', (event, hash) => callback(hash));
-  },
+  openAuthUrl: (url) => ipcRenderer.invoke('open-auth-url', url),
+  closeAuthUrl: () => ipcRenderer.send('close-auth-server'),
+  minimizeWindow: () => ipcRenderer.send('minimize-window'),
+  restoreWindow: () => ipcRenderer.send('restore-window'),
+  onWindowMinimized: (callback) => ipcRenderer.on('window-minimized', callback),
+  onWindowRestored: (callback) => ipcRenderer.on('window-restored', callback),
 });

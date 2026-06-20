@@ -1,6 +1,3 @@
-import Phaser from 'phaser';
-import { COLORS } from '../config/constants.js';
-
 export class RecolorableButton {
   constructor(scene, x, y, w, h, label, color, callback, depth) {
     this.scene = scene;
@@ -14,104 +11,98 @@ export class RecolorableButton {
     this.disabled = false;
     this.outlineOnly = false;
     this.visible = true;
+    this._depth = depth;
+    this._alpha = 1;
 
-    this.container = scene.add.container(0, 0);
-    if (depth !== undefined) this.container.setDepth(depth);
     this.build();
   }
 
   setDepth(depth) {
-    this.container.setDepth(depth);
+    this._depth = depth;
+    if (this.graphics) this.graphics.setDepth(depth);
+    if (this.text) this.text.setDepth(depth);
   }
 
   build() {
-    const g = this.scene.add.graphics();
+    this.graphics = this.scene.add.graphics();
+    if (this._depth !== undefined) this.graphics.setDepth(this._depth);
 
-    if (this.outlineOnly) {
-      g.lineStyle(3, this.color, 1);
-      g.strokeRoundedRect(1, 1, this.w - 2, this.h - 2, 8);
-    } else {
-      g.fillStyle(this.color, this.disabled ? 0.4 : 1);
-      g.fillRoundedRect(0, 0, this.w, this.h, 8);
-
-      if (!this.disabled) {
-        g.lineStyle(1, 0xffffff, 0.2);
-        g.strokeRoundedRect(0, 0, this.w, this.h, 8);
-      }
-    }
-
-    const text = this.scene.add.text(this.w / 2, this.h / 2, this.label, {
+    this.text = this.scene.add.text(this.x + this.w / 2, this.y + this.h / 2, this.label, {
       fontSize: this.h > 40 ? '16px' : '13px',
-      color: this.disabled ? '#666666' : '#ffffff',
+      color: '#ffffff',
       fontFamily: 'Arial',
       fontStyle: 'bold',
     }).setOrigin(0.5);
+    if (this._depth !== undefined) this.text.setDepth(this._depth);
 
-    this.container.add([g, text]);
-    this.container.setPosition(this.x, this.y);
+    this.zone = this.scene.add.zone(this.x + this.w / 2, this.y + this.h / 2, this.w, this.h)
+      .setInteractive({ useHandCursor: true });
+    if (this._depth !== undefined) this.zone.setDepth(this._depth);
+
+    this.drawGraphics();
 
     if (!this.disabled) {
-      this.container.setSize(this.w, this.h);
-      this.container.setInteractive({ useHandCursor: true });
-      this.container.on('pointerdown', () => {
+      this.zone.on('pointerdown', () => {
         if (this.callback) this.callback();
       });
-      this.container.on('pointerover', () => {
+      this.zone.on('pointerover', () => {
         if (!this.outlineOnly) {
-          g.clear();
-          g.fillStyle(this.color, 0.8);
-          g.fillRoundedRect(0, 0, this.w, this.h, 8);
-          g.lineStyle(2, 0xffffff, 0.3);
-          g.strokeRoundedRect(0, 0, this.w, this.h, 8);
+          this.drawGraphics(0.8);
         }
       });
-      this.container.on('pointerout', () => {
+      this.zone.on('pointerout', () => {
         if (!this.outlineOnly) {
-          g.clear();
-          g.fillStyle(this.color, 1);
-          g.fillRoundedRect(0, 0, this.w, this.h, 8);
+          this.drawGraphics(1);
         }
       });
     }
 
-    this.graphics = g;
-    this.text = text;
+    this.allObjects = [this.graphics, this.text, this.zone];
+  }
+
+  drawGraphics(alpha) {
+    if (alpha === undefined) alpha = this.disabled ? 0.4 : 1;
+    this._alpha = alpha;
+    this.graphics.clear();
+    if (this.outlineOnly) {
+      this.graphics.lineStyle(3, this.color, 1);
+      this.graphics.strokeRoundedRect(this.x + 1, this.y + 1, this.w - 2, this.h - 2, 8);
+    } else {
+      this.graphics.fillStyle(this.color, alpha);
+      this.graphics.fillRoundedRect(this.x, this.y, this.w, this.h, 8);
+      if (!this.disabled) {
+        this.graphics.lineStyle(1, 0xffffff, 0.2);
+        this.graphics.strokeRoundedRect(this.x, this.y, this.w, this.h, 8);
+      }
+    }
   }
 
   setColor(color) {
     this.color = color;
-    this.graphics.clear();
-    if (this.outlineOnly) {
-      this.graphics.lineStyle(3, color, 1);
-      this.graphics.strokeRoundedRect(1, 1, this.w - 2, this.h - 2, 8);
-    } else {
-      this.graphics.fillStyle(color, this.disabled ? 0.4 : 1);
-      this.graphics.fillRoundedRect(0, 0, this.w, this.h, 8);
-    }
+    this.drawGraphics(this._alpha);
   }
 
   setOutlineOnly(val) {
     this.outlineOnly = val;
-    this.setColor(this.color);
+    this.drawGraphics(this._alpha);
+  }
+
+  setText(text) {
+    this.text.setText(text);
   }
 
   setDisabled(val) {
     this.disabled = val;
-    this.container.removeInteractive();
-    this.graphics.clear();
-    this.graphics.fillStyle(this.color, val ? 0.4 : 1);
-    this.graphics.fillRoundedRect(0, 0, this.w, this.h, 8);
     this.text.setColor(val ? '#666666' : '#ffffff');
-
-    if (!val) {
-      this.container.setInteractive({ useHandCursor: true });
-      this.container.on('pointerdown', () => {
-        if (this.callback) this.callback();
-      });
+    if (val) {
+      this.zone.removeInteractive();
+    } else {
+      this.zone.setInteractive({ useHandCursor: true });
     }
+    this.drawGraphics();
   }
 
   destroy() {
-    this.container.destroy();
+    this.allObjects.forEach(o => o.destroy());
   }
 }

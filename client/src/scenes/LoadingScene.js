@@ -12,6 +12,7 @@ export class LoadingScene extends Phaser.Scene {
     this.mode = data.mode || 'single';
     this.user = data.user || null;
     this.serverId = data.serverId || null;
+    this.savedGardens = data.savedGardens || null;
   }
 
   create() {
@@ -60,6 +61,7 @@ export class LoadingScene extends Phaser.Scene {
         mode: this.mode,
         user: this.user,
         serverId: this.serverId,
+        savedGardens: this.savedGardens,
       });
     });
   }

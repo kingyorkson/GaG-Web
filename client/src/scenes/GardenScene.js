@@ -4,6 +4,7 @@ import { SEEDS } from '../config/seeds.js';
 import { RecolorableButton } from '../ui/RecolorableButton.js';
 import { InventoryUI } from '../ui/InventoryUI.js';
 import { GrowthSystem } from '../systems/GrowthSystem.js';
+import { SaveSystem } from '../systems/SaveSystem.js';
 
 const DEPTH = {
   BACKGROUND: 0,
@@ -29,10 +30,12 @@ export class GardenScene extends Phaser.Scene {
     this.user = data.user || null;
     this.serverId = data.serverId || null;
     this.otherPlayers = data.otherPlayers || [];
+    this.savedGardens = data.savedGardens || null;
   }
 
   create() {
     this.growthSystem = new GrowthSystem();
+    this.saveSystem = new SaveSystem(this.user);
     this.gardens = [];
     this.currentGardenIndex = 0;
     this.placedProps = [];
@@ -41,9 +44,16 @@ export class GardenScene extends Phaser.Scene {
     this.currentTool = null;
     this.cash = 100;
 
+    if (this.savedGardens) {
+      this.gardens = this.savedGardens;
+    }
+
+    this.events.on('shutdown', this.shutdown, this);
+
     this.cameras.main.fadeIn(500, 0, 0, 0);
     this.createGarden(0);
     this.createUI();
+    this.setupKeyboard();
     this.setupGamepad();
     this.processOfflineGrowth();
   }
@@ -424,6 +434,17 @@ export class GardenScene extends Phaser.Scene {
     }
   }
 
+  setupKeyboard() {
+    this.input.keyboard.on('keydown-TAB', (event) => {
+      event.preventDefault();
+      if (!this.tabletOpen) {
+        this.openTablet();
+      } else {
+        this.closeTablet();
+      }
+    });
+  }
+
   setupGamepad() {
     this.input.gamepad.on('connected', (pad) => {
       this.gamepad = pad;
@@ -460,6 +481,38 @@ export class GardenScene extends Phaser.Scene {
         this.closeTablet();
         this.gamepad = null;
       }
+    }
+  }
+
+  showMessage(msg) {
+    const text = this.add.text(GAME_WIDTH / 2, GAME_HEIGHT - 10, msg, {
+      fontSize: '14px', color: '#4ecca3', fontFamily: 'Arial',
+      backgroundColor: '#00000088', padding: { x: 8, y: 4 },
+    }).setOrigin(0.5, 1).setDepth(DEPTH.POPUP);
+
+    this.time.delayedCall(2000, () => text.destroy());
+  }
+
+  shutdown() {
+    if (this.gardens.length > 0) {
+      const cleanGardens = this.gardens.map(garden => ({
+        ...garden,
+        plots: garden.plots.map(plot => ({
+          x: plot.x, y: plot.y, w: plot.w, h: plot.h,
+          row: plot.row, col: plot.col,
+          plant: plot.plant ? {
+            type: plot.plant.type,
+            seedId: plot.plant.seedId,
+            name: plot.plant.name,
+            plantedAt: plot.plant.plantedAt,
+            growTime: plot.plant.growTime,
+            grown: plot.plant.grown,
+            harvestable: plot.plant.harvestable,
+            renewable: plot.plant.renewable,
+          } : null,
+        })),
+      }));
+      this.saveSystem.saveGarden(cleanGardens);
     }
   }
 }
