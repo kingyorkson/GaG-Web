@@ -38,7 +38,19 @@ export class PreloadScene extends Phaser.Scene {
 
     this.load.image('tablet_bg', 'assets/images/tablet_bg.png');
     this.load.image('slot_bg', 'assets/images/slot_bg.png');
+    this.load.image('soil', 'assets/images/ui/soil.png');
+    this.load.image('grass', 'assets/images/ui/grass.png');
+    this.load.image('dirt', 'assets/images/ui/dirt.png');
+    this.load.image('shovel', 'assets/images/items/shovel.png');
+    this.load.image('sledgehammer', 'assets/images/items/sledgehammer.png');
     this.load.video('tablet_bootup', 'assets/video/tablet_bootup.mp4');
+
+    // Seed textures
+    const seeds = ['carrot','strawberry','blueberry','tulip','tomato','apple',
+      'bamboo','corn','cactus','pineapple','mushroom','green_bean','banana',
+      'coconut','mango','dragon_fruit','cherry','sunflower','venus_fire_trap',
+      'pomegranate','poison_apple','venom_spitter','moon_bloom','dragons_breath'];
+    seeds.forEach(s => this.load.image(`seed_${s}`, `assets/images/seeds/${s}.png`));
   }
 
   create() {

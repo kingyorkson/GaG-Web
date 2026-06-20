@@ -1,5 +1,6 @@
 -- Supabase SQL schema for Growing & Gardening 2D
 -- Run this in your Supabase SQL editor
+
 -- Enable UUID extension
 CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
 
@@ -16,16 +17,17 @@ CREATE TABLE IF NOT EXISTS profiles (
   last_login TIMESTAMPTZ DEFAULT NOW()
 );
 
--- Allow users to read their own profile
 ALTER TABLE profiles ENABLE ROW LEVEL SECURITY;
 
-CREATE POLICY IF NOT EXISTS "Users can read own profile"
-  ON profiles FOR SELECT
-  USING (auth.uid() = id);
-
-CREATE POLICY IF NOT EXISTS "Users can update own profile"
-  ON profiles FOR UPDATE
-  USING (auth.uid() = id);
+-- Safely create policies (check if they exist first)
+DO $$ BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE tablename = 'profiles' AND policyname = 'Users can read own profile') THEN
+    CREATE POLICY "Users can read own profile" ON profiles FOR SELECT USING (auth.uid() = id);
+  END IF;
+  IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE tablename = 'profiles' AND policyname = 'Users can update own profile') THEN
+    CREATE POLICY "Users can update own profile" ON profiles FOR UPDATE USING (auth.uid() = id);
+  END IF;
+END $$;
 
 -- Trigger to create profile on auth signup
 CREATE OR REPLACE FUNCTION public.handle_new_user()
@@ -61,21 +63,20 @@ CREATE TABLE IF NOT EXISTS servers (
 
 ALTER TABLE servers ENABLE ROW LEVEL SECURITY;
 
-CREATE POLICY IF NOT EXISTS "Anyone can read servers"
-  ON servers FOR SELECT
-  USING (true);
-
-CREATE POLICY IF NOT EXISTS "Authenticated users can create servers"
-  ON servers FOR INSERT
-  WITH CHECK (auth.role() = 'authenticated');
-
-CREATE POLICY IF NOT EXISTS "Owners can update their servers"
-  ON servers FOR UPDATE
-  USING (auth.uid() = owner_id);
-
-CREATE POLICY IF NOT EXISTS "Owners can delete their servers"
-  ON servers FOR DELETE
-  USING (auth.uid() = owner_id);
+DO $$ BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE tablename = 'servers' AND policyname = 'Anyone can read servers') THEN
+    CREATE POLICY "Anyone can read servers" ON servers FOR SELECT USING (true);
+  END IF;
+  IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE tablename = 'servers' AND policyname = 'Authenticated users can create servers') THEN
+    CREATE POLICY "Authenticated users can create servers" ON servers FOR INSERT WITH CHECK (auth.role() = 'authenticated');
+  END IF;
+  IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE tablename = 'servers' AND policyname = 'Owners can update their servers') THEN
+    CREATE POLICY "Owners can update their servers" ON servers FOR UPDATE USING (auth.uid() = owner_id);
+  END IF;
+  IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE tablename = 'servers' AND policyname = 'Owners can delete their servers') THEN
+    CREATE POLICY "Owners can delete their servers" ON servers FOR DELETE USING (auth.uid() = owner_id);
+  END IF;
+END $$;
 
 -- Friends table
 CREATE TABLE IF NOT EXISTS friends (
@@ -88,17 +89,17 @@ CREATE TABLE IF NOT EXISTS friends (
 
 ALTER TABLE friends ENABLE ROW LEVEL SECURITY;
 
-CREATE POLICY IF NOT EXISTS "Users can read own friends"
-  ON friends FOR SELECT
-  USING (auth.uid() = user_id OR auth.uid() = friend_id);
-
-CREATE POLICY IF NOT EXISTS "Users can add friends"
-  ON friends FOR INSERT
-  WITH CHECK (auth.uid() = user_id);
-
-CREATE POLICY IF NOT EXISTS "Users can remove friends"
-  ON friends FOR DELETE
-  USING (auth.uid() = user_id OR auth.uid() = friend_id);
+DO $$ BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE tablename = 'friends' AND policyname = 'Users can read own friends') THEN
+    CREATE POLICY "Users can read own friends" ON friends FOR SELECT USING (auth.uid() = user_id OR auth.uid() = friend_id);
+  END IF;
+  IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE tablename = 'friends' AND policyname = 'Users can add friends') THEN
+    CREATE POLICY "Users can add friends" ON friends FOR INSERT WITH CHECK (auth.uid() = user_id);
+  END IF;
+  IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE tablename = 'friends' AND policyname = 'Users can remove friends') THEN
+    CREATE POLICY "Users can remove friends" ON friends FOR DELETE USING (auth.uid() = user_id OR auth.uid() = friend_id);
+  END IF;
+END $$;
 
 -- Friend requests
 CREATE TABLE IF NOT EXISTS friend_requests (
@@ -112,17 +113,17 @@ CREATE TABLE IF NOT EXISTS friend_requests (
 
 ALTER TABLE friend_requests ENABLE ROW LEVEL SECURITY;
 
-CREATE POLICY IF NOT EXISTS "Users can read requests sent to them"
-  ON friend_requests FOR SELECT
-  USING (auth.uid() = to_user_id OR auth.uid() = from_user_id);
-
-CREATE POLICY IF NOT EXISTS "Users can send requests"
-  ON friend_requests FOR INSERT
-  WITH CHECK (auth.uid() = from_user_id);
-
-CREATE POLICY IF NOT EXISTS "Recipients can update status"
-  ON friend_requests FOR UPDATE
-  USING (auth.uid() = to_user_id);
+DO $$ BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE tablename = 'friend_requests' AND policyname = 'Users can read requests sent to them') THEN
+    CREATE POLICY "Users can read requests sent to them" ON friend_requests FOR SELECT USING (auth.uid() = to_user_id OR auth.uid() = from_user_id);
+  END IF;
+  IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE tablename = 'friend_requests' AND policyname = 'Users can send requests') THEN
+    CREATE POLICY "Users can send requests" ON friend_requests FOR INSERT WITH CHECK (auth.uid() = from_user_id);
+  END IF;
+  IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE tablename = 'friend_requests' AND policyname = 'Recipients can update status') THEN
+    CREATE POLICY "Recipients can update status" ON friend_requests FOR UPDATE USING (auth.uid() = to_user_id);
+  END IF;
+END $$;
 
 -- Gardens table
 CREATE TABLE IF NOT EXISTS gardens (
@@ -136,17 +137,17 @@ CREATE TABLE IF NOT EXISTS gardens (
 
 ALTER TABLE gardens ENABLE ROW LEVEL SECURITY;
 
-CREATE POLICY IF NOT EXISTS "Users can read own garden"
-  ON gardens FOR SELECT
-  USING (auth.uid() = user_id);
-
-CREATE POLICY IF NOT EXISTS "Users can update own garden"
-  ON gardens FOR INSERT
-  WITH CHECK (auth.uid() = user_id);
-
-CREATE POLICY IF NOT EXISTS "Users can modify own garden"
-  ON gardens FOR UPDATE
-  USING (auth.uid() = user_id);
+DO $$ BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE tablename = 'gardens' AND policyname = 'Users can read own garden') THEN
+    CREATE POLICY "Users can read own garden" ON gardens FOR SELECT USING (auth.uid() = user_id);
+  END IF;
+  IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE tablename = 'gardens' AND policyname = 'Users can update own garden') THEN
+    CREATE POLICY "Users can update own garden" ON gardens FOR INSERT WITH CHECK (auth.uid() = user_id);
+  END IF;
+  IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE tablename = 'gardens' AND policyname = 'Users can modify own garden') THEN
+    CREATE POLICY "Users can modify own garden" ON gardens FOR UPDATE USING (auth.uid() = user_id);
+  END IF;
+END $$;
 
 -- Enable realtime for multiplayer tables
 ALTER PUBLICATION supabase_realtime ADD TABLE servers;

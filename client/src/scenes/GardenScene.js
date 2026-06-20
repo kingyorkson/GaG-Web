@@ -208,22 +208,37 @@ export class GardenScene extends Phaser.Scene {
 
   renderPlant(plot) {
     if (plot.plant && plot.plant.type === 'seed') {
-      const g = this.add.graphics();
       const cx = plot.x + plot.w / 2;
       const cy = plot.y + plot.h / 2;
+      const texKey = `seed_${plot.plant.seedId}`;
 
-      if (plot.plant.grown) {
-        g.fillStyle(0x2ecc71, 1);
-        g.fillCircle(cx, cy, 20);
-        g.fillStyle(0xe74c3c, 1);
-        g.fillCircle(cx, cy, 10);
+      if (this.textures.exists(texKey)) {
+        const img = this.add.image(cx, cy, texKey).setDisplaySize(plot.w - 10, plot.h - 10);
+        if (plot.plant.grown) {
+          img.setTint(0xffffff);
+          const border = this.add.graphics();
+          border.lineStyle(2, 0xffd700, 1);
+          border.strokeCircle(cx, cy, plot.w / 2 - 5);
+          plot.plant.graphics = this.add.container(0, 0, [border, img]);
+        } else {
+          img.setTint(0xaaaaaa);
+          plot.plant.graphics = img;
+        }
       } else {
-        g.fillStyle(0x27ae60, 1);
-        g.fillCircle(cx, cy, 10);
-        g.fillStyle(0x2ecc71, 1);
-        g.fillCircle(cx, cy - 5, 5);
+        const g = this.add.graphics();
+        if (plot.plant.grown) {
+          g.fillStyle(0x2ecc71, 1);
+          g.fillCircle(cx, cy, 20);
+          g.fillStyle(0xe74c3c, 1);
+          g.fillCircle(cx, cy, 10);
+        } else {
+          g.fillStyle(0x27ae60, 1);
+          g.fillCircle(cx, cy, 10);
+          g.fillStyle(0x2ecc71, 1);
+          g.fillCircle(cx, cy - 5, 5);
+        }
+        plot.plant.graphics = g;
       }
-      plot.plant.graphics = g;
     }
   }
 

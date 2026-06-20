@@ -73,11 +73,7 @@ export class MenuScene extends Phaser.Scene {
     });
     this.multiplayerBtn.setDisabled(true);
 
-    this.signInBtn = new RecolorableButton(this, btnX, titleY + 250, btnW, btnH, 'Sign In', COLORS.buttonGray, () => {
-      this.scene.start('AuthScene', { returnScene: 'MenuScene' });
-    });
-
-    this.friendsBtn = new RecolorableButton(this, btnX, titleY + 325, btnW, btnH, 'Friends', COLORS.buttonGray, () => {
+    this.friendsBtn = new RecolorableButton(this, btnX, titleY + 250, btnW, btnH, 'Friends', COLORS.buttonGray, () => {
       this.openFriendsMenu();
     });
 
