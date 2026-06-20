@@ -149,10 +149,61 @@ DO $$ BEGIN
   END IF;
 END $$;
 
--- Enable realtime for multiplayer tables
+-- Messages and calls for chat system
+CREATE TABLE IF NOT EXISTS messages (
+  id BIGSERIAL PRIMARY KEY,
+  from_user_id UUID REFERENCES auth.users(id) ON DELETE CASCADE,
+  to_user_id UUID REFERENCES auth.users(id) ON DELETE CASCADE,
+  content TEXT NOT NULL,
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  read BOOLEAN DEFAULT FALSE
+);
+
+ALTER TABLE messages ENABLE ROW LEVEL SECURITY;
+
+DO $$ BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE tablename = 'messages' AND policyname = 'read_own_messages') THEN
+    CREATE POLICY read_own_messages ON messages FOR SELECT USING (auth.uid() = from_user_id OR auth.uid() = to_user_id);
+  END IF;
+  IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE tablename = 'messages' AND policyname = 'send_messages') THEN
+    CREATE POLICY send_messages ON messages FOR INSERT WITH CHECK (auth.uid() = from_user_id);
+  END IF;
+END $$;
+
+CREATE TABLE IF NOT EXISTS calls (
+  id BIGSERIAL PRIMARY KEY,
+  from_user_id UUID REFERENCES auth.users(id) ON DELETE CASCADE,
+  to_user_id UUID REFERENCES auth.users(id) ON DELETE CASCADE,
+  status TEXT DEFAULT 'ringing' CHECK (status IN ('ringing', 'answered', 'declined', 'ended')),
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  ended_at TIMESTAMPTZ
+);
+
+ALTER TABLE calls ENABLE ROW LEVEL SECURITY;
+
+DO $$ BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE tablename = 'calls' AND policyname = 'read_own_calls') THEN
+    CREATE POLICY read_own_calls ON calls FOR SELECT USING (auth.uid() = from_user_id OR auth.uid() = to_user_id);
+  END IF;
+  IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE tablename = 'calls' AND policyname = 'create_calls') THEN
+    CREATE POLICY create_calls ON calls FOR INSERT WITH CHECK (auth.uid() = from_user_id);
+  END IF;
+  IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE tablename = 'calls' AND policyname = 'update_own_calls') THEN
+    CREATE POLICY update_own_calls ON calls FOR UPDATE USING (auth.uid() = from_user_id OR auth.uid() = to_user_id);
+  END IF;
+END $$;
+
+CREATE INDEX IF NOT EXISTS idx_messages_from ON messages(from_user_id);
+CREATE INDEX IF NOT EXISTS idx_messages_to ON messages(to_user_id);
+CREATE INDEX IF NOT EXISTS idx_calls_from ON calls(from_user_id);
+CREATE INDEX IF NOT EXISTS idx_calls_to ON calls(to_user_id);
+
+-- Enable realtime for chat, call, and multiplayer tables
 ALTER PUBLICATION supabase_realtime ADD TABLE servers;
 ALTER PUBLICATION supabase_realtime ADD TABLE friends;
 ALTER PUBLICATION supabase_realtime ADD TABLE friend_requests;
+ALTER PUBLICATION supabase_realtime ADD TABLE messages;
+ALTER PUBLICATION supabase_realtime ADD TABLE calls;
 
 -- Indexes
 CREATE INDEX IF NOT EXISTS idx_profiles_username ON profiles(username);

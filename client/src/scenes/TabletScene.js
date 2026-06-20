@@ -2,6 +2,9 @@ import Phaser from 'phaser';
 import { COLORS, GAME_WIDTH, GAME_HEIGHT } from '../config/constants.js';
 import { RecolorableButton } from '../ui/RecolorableButton.js';
 import { SEEDS, getRandomRestock, RESTOCK_INTERVAL } from '../config/seeds.js';
+import { supabase } from '../systems/SupabaseClient.js';
+import { ChatSystem } from '../systems/ChatSystem.js';
+import { CallSystem } from '../systems/CallSystem.js';
 
 export class TabletScene extends Phaser.Scene {
   constructor() {
@@ -10,6 +13,7 @@ export class TabletScene extends Phaser.Scene {
 
   init(data) {
     this.userData = data || {};
+    this.section = data.section || null;
   }
 
   create() {
@@ -35,21 +39,67 @@ export class TabletScene extends Phaser.Scene {
       fontSize: '18px', color: '#ffd700', fontFamily: 'Arial', fontStyle: 'bold',
     }).setOrigin(1, 0);
 
+    this.chatSystem = new ChatSystem();
+    this.callSystem = new CallSystem();
+
+    this.setupCallSubscriptions();
+    this.setupKeyboard();
+
     this.createTabButtons();
     this.createHomeButton();
 
-    this.currentTab = 'main';
-    this.showMainMenu();
+    if (this.section === 'friends') {
+      this.switchTab('friends');
+    } else {
+      this.currentTab = 'main';
+      this.showMainMenu();
+    }
+  }
+
+  setupCallSubscriptions() {
+    this.callSystem.onIncomingCall = (call) => {
+      this.playRingSound();
+      this.callSystem.sendNotification('Incoming Call', `${call.from_user_id} is calling you`);
+      this.showIncomingCallUI(call);
+    };
+    this.callSystem.onCallUpdate = (call) => {
+      if (call.status === 'answered' && this.callActiveOverlay) {
+        this.callActiveOverlay.destroy();
+        this.callActiveOverlay = null;
+        this.showActiveCallUI(call);
+      } else if (call.status === 'declined' || call.status === 'ended') {
+        if (this.callActiveOverlay) { this.callActiveOverlay.destroy(); this.callActiveOverlay = null; }
+        if (this.incomingCallOverlay) { this.incomingCallOverlay.destroy(); this.incomingCallOverlay = null; }
+      }
+    };
+    if (this.userData.user?.id) {
+      this.callSystem.subscribeToCalls(this.userData.user.id);
+    }
+  }
+
+  setupKeyboard() {
+    this.input.keyboard.on('keydown-ESC', () => {
+      if (this.chatOverlay) { this.closeChat(); return; }
+      if (this.incomingCallOverlay) { this.incomingCallOverlay.destroy(); this.incomingCallOverlay = null; return; }
+      if (this.callActiveOverlay) { this.callActiveOverlay.destroy(); this.callActiveOverlay = null; return; }
+    });
+  }
+
+  playRingSound() {
+    this.callSystem.playRingSound();
   }
 
   createTabButtons() {
     const b = this.bounds;
     const tabY = b.y + 50;
-    const tabW = (b.w - 30) / 2;
+    const tabCount = 3;
+    const gap = 10;
+    const tabW = (b.w - gap * (tabCount + 1)) / tabCount;
 
     this.tabs = {
-      seeds: new RecolorableButton(this, b.x + 10, tabY, tabW, 35, 'Seeds', COLORS.buttonGray, () => this.switchTab('seeds')),
-      sell: new RecolorableButton(this, b.x + 15 + tabW, tabY, tabW, 35, 'Sell', COLORS.buttonGray, () => this.switchTab('sell')),
+      seeds: new RecolorableButton(this, b.x + gap, tabY, tabW, 35, 'Seeds', COLORS.buttonGray, () => this.switchTab('seeds')),
+      sell: new RecolorableButton(this, b.x + gap * 2 + tabW, tabY, tabW, 35, 'Sell', COLORS.buttonGray, () => this.switchTab('sell')),
+      friends: new RecolorableButton(this, b.x + gap * 3 + tabW * 2, tabY, tabW, 35, 'Friends', COLORS.buttonGray, () => this.switchTab('friends')),
     };
   }
 
@@ -82,7 +132,338 @@ export class TabletScene extends Phaser.Scene {
     switch (tab) {
       case 'seeds': this.showSeedsShop(); break;
       case 'sell': this.showSellMenu(); break;
+      case 'friends': this.showFriendsList(); break;
     }
+  }
+
+  async showFriendsList() {
+    const b = this.bounds;
+    this.add.text(GAME_WIDTH / 2, b.y + 90, 'Friends', {
+      fontSize: '22px', color: '#ffffff', fontFamily: 'Arial', fontStyle: 'bold',
+    }).setOrigin(0.5).setDepth(100);
+
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) {
+      this.add.text(GAME_WIDTH / 2, GAME_HEIGHT / 2, 'Sign in to see friends', {
+        fontSize: '16px', color: '#aaaaaa', fontFamily: 'Arial',
+      }).setOrigin(0.5).setDepth(100);
+      return;
+    }
+
+    const { data: friends } = await supabase
+      .from('friends')
+      .select('friend_id, profiles!friends_friend_id_fkey(username)')
+      .eq('user_id', user.id);
+
+    const list = friends || [];
+    if (list.length === 0) {
+      this.add.text(GAME_WIDTH / 2, GAME_HEIGHT / 2, 'No friends yet', {
+        fontSize: '16px', color: '#aaaaaa', fontFamily: 'Arial',
+      }).setOrigin(0.5).setDepth(100);
+      return;
+    }
+
+    let yOff = b.y + 130;
+    list.forEach((f) => {
+      const username = f.profiles?.username || 'Unknown';
+      const row = this.add.graphics().setDepth(100);
+      row.fillStyle(0x2d2d44, 0.8);
+      row.fillRoundedRect(b.x + 15, yOff, b.w - 30, 50, 5);
+
+      this.add.text(b.x + 25, yOff + 25, username, {
+        fontSize: '16px', color: '#ffffff', fontFamily: 'Arial', fontStyle: 'bold',
+      }).setOrigin(0, 0.5).setDepth(100);
+
+      new RecolorableButton(this, b.x + b.w - 180, yOff + 7, 70, 35, 'Chat', COLORS.buttonGray, () => {
+        this.openChat(f.friend_id, username);
+      });
+
+      new RecolorableButton(this, b.x + b.w - 95, yOff + 7, 70, 35, 'Call', COLORS.buttonGreen, () => {
+        this.startCall(f.friend_id, username);
+      });
+
+      yOff += 60;
+    });
+  }
+
+  async openChat(friendId, friendName) {
+    this.chatOverlay = this.add.container(0, 0).setDepth(300);
+
+    const pw = GAME_WIDTH * 0.7;
+    const ph = GAME_HEIGHT * 0.65;
+    const px = (GAME_WIDTH - pw) / 2;
+    const py = (GAME_HEIGHT - ph) / 2;
+
+    const bg = this.add.graphics();
+    bg.fillStyle(0x1a1a2e, 0.97);
+    bg.fillRoundedRect(px, py, pw, ph, 15);
+    bg.lineStyle(2, 0x4ecca3, 1);
+    bg.strokeRoundedRect(px, py, pw, ph, 15);
+    this.chatOverlay.add(bg);
+
+    const headerText = this.add.text(px + pw / 2, py + 20, friendName, {
+      fontSize: '20px', color: '#ffffff', fontFamily: 'Arial', fontStyle: 'bold',
+    }).setOrigin(0.5);
+    this.chatOverlay.add(headerText);
+
+    const closeBtn = new RecolorableButton(this, px + pw - 45, py + 10, 35, 35, 'X', COLORS.danger, () => this.closeChat());
+    this.chatOverlay.add(closeBtn.graphics);
+    this.chatOverlay.add(closeBtn.text);
+    this.chatOverlay.add(closeBtn.zone);
+
+    const msgAreaY = py + 55;
+    const msgAreaH = ph - 120;
+    const msgBg = this.add.graphics();
+    msgBg.fillStyle(0x2d2d44, 0.8);
+    msgBg.fillRoundedRect(px + 10, msgAreaY, pw - 20, msgAreaH, 8);
+    this.chatOverlay.add(msgBg);
+
+    this.chatMessages = [];
+    this.chatMsgContainer = this.add.container(0, 0);
+    this.chatOverlay.add(this.chatMsgContainer);
+
+    const inputH = 40;
+    const inputY = msgAreaY + msgAreaH + 10;
+    const inputBg = this.add.graphics();
+    inputBg.fillStyle(0x3d3d55, 1);
+    inputBg.fillRoundedRect(px + 10, inputY, pw - 80, inputH, 8);
+    this.chatOverlay.add(inputBg);
+
+    const sendBtn = new RecolorableButton(this, px + pw - 60, inputY, 50, inputH, 'Send', COLORS.buttonGreen, () => this.sendChatMessage(friendId));
+
+    this.chatInput = { value: '', x: px + 18, y: inputY + inputH / 2 };
+
+    this.chatInputText = this.add.text(px + 18, inputY + inputH / 2, '', {
+      fontSize: '15px', color: '#ffffff', fontFamily: 'Arial',
+    }).setOrigin(0, 0.5);
+    this.chatOverlay.add(this.chatInputText);
+
+    this.chatInputPlaceholder = this.add.text(px + 18, inputY + inputH / 2, 'Type a message...', {
+      fontSize: '15px', color: '#555555', fontFamily: 'Arial',
+    }).setOrigin(0, 0.5);
+    this.chatOverlay.add(this.chatInputPlaceholder);
+
+    const inputZone = this.add.zone(px + 10 + (pw - 80) / 2, inputY + inputH / 2, pw - 80, inputH)
+      .setInteractive({ useHandCursor: true });
+    this.chatOverlay.add(inputZone);
+
+    inputZone.on('pointerdown', () => {
+      this.chatInputFocused = true;
+    });
+
+    this.currentChatInputHandler = (event) => {
+      if (!this.chatInputFocused) return;
+      if (event.key === 'Backspace') {
+        this.chatInput.value = this.chatInput.value.slice(0, -1);
+      } else if (event.key === 'Enter') {
+        this.sendChatMessage(friendId);
+        return;
+      } else if (event.key.length === 1) {
+        this.chatInput.value += event.key;
+      }
+      this.chatInputText.setText(this.chatInput.value);
+      this.chatInputPlaceholder.setVisible(this.chatInput.value.length === 0);
+    };
+    this.input.keyboard.on('keydown', this.currentChatInputHandler);
+
+    this.receivedMessages = {};
+    this.loadMessages(friendId);
+    this.subscribeToMessages(friendId);
+  }
+
+  async loadMessages(friendId) {
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) return;
+    const msgs = await this.chatSystem.getMessages(user.id, friendId);
+    this.renderMessages(msgs);
+  }
+
+  subscribeToMessages(friendId) {
+    this.chatSystem.onMessage = (msg) => {
+      if (msg.from_user_id === friendId && !this.receivedMessages[msg.id]) {
+        this.receivedMessages[msg.id] = true;
+        this.renderMessages([msg]);
+      }
+    };
+    const { data: { user } } = supabase.auth.getUser().then(({ data }) => {
+      if (data?.user) this.chatSystem.subscribeToMessages(data.user.id);
+    });
+  }
+
+  renderMessages(msgs) {
+    msgs.forEach(msg => {
+      if (this.receivedMessages[msg.id]) return;
+      this.receivedMessages[msg.id] = true;
+
+      const isMine = msg.from_user_id === this.userData.user?.id;
+      const pw = GAME_WIDTH * 0.7;
+      const px = (GAME_WIDTH - pw) / 2;
+      const msgAreaY = (GAME_HEIGHT - GAME_HEIGHT * 0.65) / 2 + 55;
+      const maxW = pw - 60;
+
+      const fontSize = msg.content.length > 60 ? '13px' : msg.content.length > 30 ? '14px' : '15px';
+      const textObj = this.add.text(0, 0, msg.content, {
+        fontSize, color: '#ffffff', fontFamily: 'Arial', wordWrap: { width: maxW - 20 },
+      });
+      const tw = Math.min(textObj.width + 20, maxW);
+      const th = Math.max(textObj.height + 14, 30);
+      textObj.destroy();
+
+      const msgX = isMine ? px + pw - tw - 15 : px + 15;
+      const existingCount = Object.keys(this.receivedMessages).length;
+      const msgY = msgAreaY + 10 + (existingCount - 1) * (th + 4);
+
+      const bubble = this.add.graphics();
+      bubble.fillStyle(isMine ? 0x4ecca3 : 0x3d3d55, 0.9);
+      bubble.fillRoundedRect(msgX, msgY, tw, th, 8);
+      this.chatMsgContainer.add(bubble);
+
+      const txt = this.add.text(msgX + 10, msgY + 7, msg.content, {
+        fontSize, color: '#ffffff', fontFamily: 'Arial', wordWrap: { width: maxW - 20 },
+      });
+      this.chatMsgContainer.add(txt);
+    });
+  }
+
+  async sendChatMessage(friendId) {
+    const text = this.chatInput?.value?.trim();
+    if (!text) return;
+
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) return;
+
+    await this.chatSystem.sendMessage(user.id, friendId, text);
+    this.renderMessages([{
+      id: Date.now(),
+      from_user_id: user.id,
+      to_user_id: friendId,
+      content: text,
+      created_at: new Date().toISOString(),
+    }]);
+
+    this.chatInput.value = '';
+    this.chatInputText.setText('');
+    this.chatInputPlaceholder.setVisible(true);
+  }
+
+  closeChat() {
+    this.chatSystem.onMessage = null;
+    this.chatSystem.unsubscribe();
+    if (this.currentChatInputHandler) {
+      this.input.keyboard.off('keydown', this.currentChatInputHandler);
+      this.currentChatInputHandler = null;
+    }
+    this.chatInputFocused = false;
+    if (this.chatOverlay) { this.chatOverlay.destroy(); this.chatOverlay = null; }
+  }
+
+  async startCall(friendId, friendName) {
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) return;
+
+    const call = await this.callSystem.startCall(user.id, friendId);
+    if (call) {
+      this.showMessage(`Calling ${friendName}...`);
+      this.showCallingUI(call.id, friendName);
+    }
+  }
+
+  showCallingUI(callId, friendName) {
+    this.callActiveOverlay = this.add.container(0, 0).setDepth(400);
+
+    const pw = 350;
+    const ph = 180;
+    const px = (GAME_WIDTH - pw) / 2;
+    const py = (GAME_HEIGHT - ph) / 2;
+
+    const bg = this.add.graphics();
+    bg.fillStyle(0x1a1a2e, 0.95);
+    bg.fillRoundedRect(px, py, pw, ph, 15);
+    bg.lineStyle(2, 0x4ecca3, 1);
+    bg.strokeRoundedRect(px, py, pw, ph, 15);
+    this.callActiveOverlay.add(bg);
+
+    this.callActiveOverlay.add(this.add.text(px + pw / 2, py + 35, `Calling ${friendName}...`, {
+      fontSize: '18px', color: '#ffffff', fontFamily: 'Arial',
+    }).setOrigin(0.5));
+
+    this.callActiveOverlay.add(this.add.text(px + pw / 2, py + 65, 'Waiting for answer', {
+      fontSize: '14px', color: '#aaaaaa', fontFamily: 'Arial',
+    }).setOrigin(0.5));
+
+    const hangUpBtn = new RecolorableButton(this, px + pw / 2 - 50, py + 110, 100, 40, 'Hang Up', COLORS.danger, () => {
+      this.callSystem.hangUp(callId);
+      if (this.callActiveOverlay) { this.callActiveOverlay.destroy(); this.callActiveOverlay = null; }
+    });
+  }
+
+  showIncomingCallUI(call) {
+    if (this.incomingCallOverlay) return;
+    this.incomingCallOverlay = this.add.container(0, 0).setDepth(400);
+
+    this.playRingSound();
+    this.ringInterval = setInterval(() => this.playRingSound(), 1500);
+
+    const pw = 350;
+    const ph = 180;
+    const px = (GAME_WIDTH - pw) / 2;
+    const py = (GAME_HEIGHT - ph) / 2;
+
+    const bg = this.add.graphics();
+    bg.fillStyle(0x1a1a2e, 0.95);
+    bg.fillRoundedRect(px, py, pw, ph, 15);
+    bg.lineStyle(2, 0xff4444, 1);
+    bg.strokeRoundedRect(px, py, pw, ph, 15);
+    this.incomingCallOverlay.add(bg);
+
+    this.incomingCallOverlay.add(this.add.text(px + pw / 2, py + 35, `Incoming Call`, {
+      fontSize: '18px', color: '#ff4444', fontFamily: 'Arial', fontStyle: 'bold',
+    }).setOrigin(0.5));
+
+    this.incomingCallOverlay.add(this.add.text(px + pw / 2, py + 65, `From: ${call.from_user_id}`, {
+      fontSize: '14px', color: '#ffffff', fontFamily: 'Arial',
+    }).setOrigin(0.5));
+
+    const answerBtn = new RecolorableButton(this, px + 20, py + 110, 130, 40, 'Answer', COLORS.buttonGreen, () => {
+      clearInterval(this.ringInterval);
+      this.callSystem.answerCall(call.id);
+      if (this.incomingCallOverlay) { this.incomingCallOverlay.destroy(); this.incomingCallOverlay = null; }
+    });
+
+    const declineBtn = new RecolorableButton(this, px + pw - 150, py + 110, 130, 40, 'Decline', COLORS.danger, () => {
+      clearInterval(this.ringInterval);
+      this.callSystem.declineCall(call.id);
+      if (this.incomingCallOverlay) { this.incomingCallOverlay.destroy(); this.incomingCallOverlay = null; }
+    });
+  }
+
+  showActiveCallUI(call) {
+    this.callActiveOverlay = this.add.container(0, 0).setDepth(400);
+
+    const pw = 350;
+    const ph = 200;
+    const px = (GAME_WIDTH - pw) / 2;
+    const py = (GAME_HEIGHT - ph) / 2;
+
+    const bg = this.add.graphics();
+    bg.fillStyle(0x1a1a2e, 0.95);
+    bg.fillRoundedRect(px, py, pw, ph, 15);
+    bg.lineStyle(2, 0x4ecca3, 2);
+    bg.strokeRoundedRect(px, py, pw, ph, 15);
+    this.callActiveOverlay.add(bg);
+
+    this.callActiveOverlay.add(this.add.text(px + pw / 2, py + 40, 'In Call', {
+      fontSize: '20px', color: '#4ecca3', fontFamily: 'Arial', fontStyle: 'bold',
+    }).setOrigin(0.5));
+
+    this.callActiveOverlay.add(this.add.text(px + pw / 2, py + 75, 'Microphone active', {
+      fontSize: '14px', color: '#aaaaaa', fontFamily: 'Arial',
+    }).setOrigin(0.5));
+
+    const hangUpBtn = new RecolorableButton(this, px + pw / 2 - 50, py + 120, 100, 40, 'Hang Up', COLORS.danger, () => {
+      this.callSystem.hangUp(call.id);
+      if (this.callActiveOverlay) { this.callActiveOverlay.destroy(); this.callActiveOverlay = null; }
+    });
   }
 
   showSeedsShop() {
@@ -262,6 +643,8 @@ export class TabletScene extends Phaser.Scene {
     }).setOrigin(0.5);
 
     const yesBtn = new RecolorableButton(this, px + 20, py + 80, pw / 2 - 30, 40, 'Yes', COLORS.buttonGreen, () => {
+      this.chatSystem.unsubscribe();
+      this.callSystem.unsubscribe();
       this.scene.stop('TabletScene');
       this.scene.stop('GardenScene');
       this.scene.start('MenuScene');
