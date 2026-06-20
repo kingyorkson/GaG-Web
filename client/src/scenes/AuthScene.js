@@ -2,6 +2,7 @@ import Phaser from 'phaser';
 import { COLORS, GAME_WIDTH, GAME_HEIGHT, AUTH_TYPES } from '../config/constants.js';
 import { RecolorableButton } from '../ui/RecolorableButton.js';
 import { AuthSystem } from '../systems/AuthSystem.js';
+import { supabase } from '../systems/SupabaseClient.js';
 import { ProgressBar } from '../ui/ProgressBar.js';
 
 export class AuthScene extends Phaser.Scene {
@@ -15,10 +16,19 @@ export class AuthScene extends Phaser.Scene {
 
   create() {
     this.authSystem = new AuthSystem();
+    this.setupAuthListener();
 
     this.cameras.main.setBackgroundColor(COLORS.background);
     this.createAuthScreen();
     this.setupGamepad();
+  }
+
+  setupAuthListener() {
+    window.addEventListener('message', (event) => {
+      if (event.data?.type === 'supabase-auth') {
+        this.handleDiscordCallback();
+      }
+    });
   }
 
   createAuthScreen() {
@@ -45,50 +55,56 @@ export class AuthScene extends Phaser.Scene {
     const btnH = 50;
     const cx = GAME_WIDTH / 2;
 
-    this.guestBtn = new RecolorableButton(this, cx - btnW - 10, py + 100, btnW, btnH, 'Guest User', COLORS.buttonGray, () => {
+    new RecolorableButton(this, cx - btnW - 10, py + 100, btnW, btnH, 'Guest User', COLORS.buttonGray, () => {
       this.showGuestForm();
     });
 
-    this.discordBtn = new RecolorableButton(this, cx + 10, py + 100, btnW, btnH, 'Discord', COLORS.buttonDiscord, () => {
+    new RecolorableButton(this, cx + 10, py + 100, btnW, btnH, 'Discord', COLORS.buttonDiscord, () => {
       this.startDiscordAuth();
     });
 
-    this.backBtn = new RecolorableButton(this, px + pw - 50, py + 10, 35, 35, 'X', COLORS.danger, () => {
+    new RecolorableButton(this, px + pw - 50, py + 10, 35, 35, 'X', COLORS.danger, () => {
       this.scene.start(this.returnScene);
     });
   }
 
   showGuestForm() {
-    this.clearMainButtons();
+    this.children.removeAll(true);
 
     const pw = 500;
     const ph = 400;
     const px = (GAME_WIDTH - pw) / 2;
     const py = (GAME_HEIGHT - ph) / 2;
 
+    const panel = this.add.graphics();
+    panel.fillStyle(COLORS.tabletBg, 0.95);
+    panel.fillRoundedRect(px, py, pw, ph, 20);
+    panel.lineStyle(2, COLORS.tabletBorder, 1);
+    panel.strokeRoundedRect(px, py, pw, ph, 20);
+
     this.add.text(GAME_WIDTH / 2, py + 40, 'Guest Account', {
       fontSize: '24px', color: '#ffffff', fontFamily: 'Arial', fontStyle: 'bold',
     }).setOrigin(0.5);
 
-    this.formData = { username: '', password: '', mode: 'login' };
+    this.formFields = {};
 
     this.add.text(GAME_WIDTH / 2 - 170, py + 90, 'Username:', {
       fontSize: '16px', color: '#aaaaaa', fontFamily: 'Arial',
     });
 
-    this.usernameInput = this.createInput(px + 60, py + 115, pw - 120, 35, '');
+    this.formFields.username = this.createInput(px + 60, py + 115, pw - 120, 35, '');
 
     this.add.text(GAME_WIDTH / 2 - 170, py + 170, 'Password:', {
       fontSize: '16px', color: '#aaaaaa', fontFamily: 'Arial',
     });
 
-    this.passwordInput = this.createInput(px + 60, py + 195, pw - 120, 35, '', true);
+    this.formFields.password = this.createInput(px + 60, py + 195, pw - 120, 35, '', true);
 
-    this.loginBtn = new RecolorableButton(this, px + 40, py + 260, (pw - 120) / 2, 40, 'Sign In', COLORS.buttonGreen, () => {
+    new RecolorableButton(this, px + 40, py + 260, (pw - 120) / 2, 40, 'Sign In', COLORS.buttonGreen, () => {
       this.handleGuestLogin();
     });
 
-    this.createBtn = new RecolorableButton(this, px + 70 + (pw - 120) / 2, py + 260, (pw - 120) / 2, 40, 'Create Account', COLORS.buttonGray, () => {
+    new RecolorableButton(this, px + 70 + (pw - 120) / 2, py + 260, (pw - 120) / 2, 40, 'Create Account', COLORS.buttonGray, () => {
       this.showCreateAccountForm();
     });
 
@@ -96,42 +112,50 @@ export class AuthScene extends Phaser.Scene {
       fontSize: '14px', color: '#e74c3c', fontFamily: 'Arial',
     }).setOrigin(0.5);
 
-    this.backBtn2 = new RecolorableButton(this, px + pw - 50, py + 10, 35, 35, 'X', COLORS.danger, () => {
+    new RecolorableButton(this, px + pw - 50, py + 10, 35, 35, 'X', COLORS.danger, () => {
       this.scene.start(this.returnScene);
     });
   }
 
   showCreateAccountForm() {
-    this.clearMainButtons();
+    this.children.removeAll(true);
 
     const pw = 500;
     const ph = 450;
     const px = (GAME_WIDTH - pw) / 2;
     const py = (GAME_HEIGHT - ph) / 2;
 
+    const panel = this.add.graphics();
+    panel.fillStyle(COLORS.tabletBg, 0.95);
+    panel.fillRoundedRect(px, py, pw, ph, 20);
+    panel.lineStyle(2, COLORS.tabletBorder, 1);
+    panel.strokeRoundedRect(px, py, pw, ph, 20);
+
     this.add.text(GAME_WIDTH / 2, py + 40, 'Create Account', {
       fontSize: '24px', color: '#ffffff', fontFamily: 'Arial', fontStyle: 'bold',
     }).setOrigin(0.5);
+
+    this.formFields = {};
 
     this.add.text(GAME_WIDTH / 2 - 170, py + 85, 'Username:', {
       fontSize: '16px', color: '#aaaaaa', fontFamily: 'Arial',
     });
 
-    this.usernameInput = this.createInput(px + 60, py + 110, pw - 120, 35, '');
+    this.formFields.username = this.createInput(px + 60, py + 110, pw - 120, 35, '');
 
     this.add.text(GAME_WIDTH / 2 - 170, py + 160, 'Password:', {
       fontSize: '16px', color: '#aaaaaa', fontFamily: 'Arial',
     });
 
-    this.passwordInput = this.createInput(px + 60, py + 185, pw - 120, 35, '', true);
+    this.formFields.password = this.createInput(px + 60, py + 185, pw - 120, 35, '', true);
 
     this.add.text(GAME_WIDTH / 2 - 170, py + 235, 'Confirm Password:', {
       fontSize: '16px', color: '#aaaaaa', fontFamily: 'Arial',
     });
 
-    this.confirmInput = this.createInput(px + 60, py + 260, pw - 120, 35, '', true);
+    this.formFields.confirm = this.createInput(px + 60, py + 260, pw - 120, 35, '', true);
 
-    this.createBtn = new RecolorableButton(this, px + 60, py + 320, pw - 120, 40, 'Create', COLORS.buttonGreen, () => {
+    new RecolorableButton(this, px + 60, py + 320, pw - 120, 40, 'Create', COLORS.buttonGreen, () => {
       this.handleAccountCreation();
     });
 
@@ -139,7 +163,7 @@ export class AuthScene extends Phaser.Scene {
       fontSize: '14px', color: '#e74c3c', fontFamily: 'Arial',
     }).setOrigin(0.5);
 
-    this.backBtn3 = new RecolorableButton(this, px + pw - 50, py + 10, 35, 35, 'X', COLORS.danger, () => {
+    new RecolorableButton(this, px + pw - 50, py + 10, 35, 35, 'X', COLORS.danger, () => {
       this.scene.start(this.returnScene);
     });
   }
@@ -151,7 +175,6 @@ export class AuthScene extends Phaser.Scene {
     bg.lineStyle(1, 0x555555, 1);
     bg.strokeRoundedRect(x, y, w, h, 5);
 
-    const displayChar = isPassword ? '*' : '';
     const text = this.add.text(x + 10, y + h / 2, '', {
       fontSize: '16px', color: '#ffffff', fontFamily: 'Arial',
     }).setOrigin(0, 0.5);
@@ -162,8 +185,8 @@ export class AuthScene extends Phaser.Scene {
 
     const inputObj = { bg, text, placeholderText, value: '', x, y, w, h, isPassword, focused: false };
 
-    const hitArea = this.add.zone(x + w / 2, y + h / 2, w, h).setInteractive({ useHandCursor: true });
-    hitArea.on('pointerdown', () => {
+    const zone = this.add.zone(x + w / 2, y + h / 2, w, h).setInteractive({ useHandCursor: true });
+    zone.on('pointerdown', () => {
       inputObj.focused = true;
       bg.clear();
       bg.fillStyle(0x3d3d55, 1);
@@ -196,9 +219,9 @@ export class AuthScene extends Phaser.Scene {
     return inputObj;
   }
 
-  handleGuestLogin() {
-    const username = this.usernameInput.value.trim();
-    const password = this.passwordInput.value;
+  async handleGuestLogin() {
+    const username = this.formFields.username?.value?.trim();
+    const password = this.formFields.password?.value;
 
     if (!username || !password) {
       this.showError('Please fill in all fields');
@@ -206,23 +229,20 @@ export class AuthScene extends Phaser.Scene {
     }
 
     this.showProgressBar('Signing in...');
-    this.authSystem.loginGuest(username, password).then(result => {
-      if (result.success) {
-        this.authSystem.saveUser(result.user);
-        this.progressComplete(() => {
-          this.scene.start(this.returnScene);
-        });
-      } else {
-        this.hideProgressBar();
-        this.showError(result.error || 'Invalid credentials');
-      }
-    });
+    const result = await this.authSystem.loginGuest(username, password);
+    if (result.success) {
+      this.authSystem.saveUser(result.user);
+      this.progressComplete(() => this.scene.start(this.returnScene));
+    } else {
+      this.hideProgressBar();
+      this.showError(result.error || 'Invalid credentials');
+    }
   }
 
   async handleAccountCreation() {
-    const username = this.usernameInput.value.trim();
-    const password = this.passwordInput.value;
-    const confirm = this.confirmInput.value;
+    const username = this.formFields.username?.value?.trim();
+    const password = this.formFields.password?.value;
+    const confirm = this.formFields.confirm?.value;
 
     if (!username || !password || !confirm) {
       this.showError('Please fill in all fields');
@@ -241,14 +261,11 @@ export class AuthScene extends Phaser.Scene {
     }
 
     this.showProgressBar('Creating account...');
-
     try {
       const result = await this.authSystem.createGuestAccount(username, password);
       if (result.success) {
         this.authSystem.saveUser(result.user);
-        this.progressComplete(() => {
-          this.scene.start(this.returnScene);
-        });
+        this.progressComplete(() => this.scene.start(this.returnScene));
       } else {
         this.hideProgressBar();
         this.showError(result.error || 'Account creation failed');
@@ -268,7 +285,9 @@ export class AuthScene extends Phaser.Scene {
     return null;
   }
 
-  startDiscordAuth() {
+  async startDiscordAuth() {
+    this.children.removeAll(true);
+
     const overlay = this.add.graphics();
     overlay.fillStyle(0x000000, 0.9);
     overlay.fillRect(0, 0, GAME_WIDTH, GAME_HEIGHT);
@@ -277,106 +296,134 @@ export class AuthScene extends Phaser.Scene {
       fontSize: '20px', color: '#ffffff', fontFamily: 'Arial',
     }).setOrigin(0.5);
 
-    this.add.text(GAME_WIDTH / 2, GAME_HEIGHT / 2 + 15, 'Please continue in the browser window that was opened.', {
+    this.add.text(GAME_WIDTH / 2, GAME_HEIGHT / 2 + 15, 'Please continue in the popup window.', {
       fontSize: '14px', color: '#aaaaaa', fontFamily: 'Arial',
     }).setOrigin(0.5);
 
-    this.showProgressBar('Waiting for authorization...');
+    this.showProgressBar('Waiting for Discord...');
 
-    const authUrl = this.authSystem.getDiscordAuthUrl();
-    window.open(authUrl, '_blank');
-
-    this.authSystem.waitForDiscordCallback().then(result => {
+    const result = await this.authSystem.loginWithDiscord();
+    if (result.success) {
+      const popup = window.open(result.url, 'Discord Auth', 'width=600,height=700');
+      this.waitingForDiscord = true;
+    } else {
       this.hideProgressBar();
-      if (result.success) {
-        this.authSystem.saveUser(result.user);
-        this.progressComplete(() => {
-          this.scene.start(this.returnScene);
-        });
-      } else {
-        this.showDiscordUsernamePrompt(result);
-      }
-    });
+      this.showError(result.error || 'Failed to start Discord auth');
+    }
   }
 
-  showDiscordUsernamePrompt(authData) {
+  async handleDiscordCallback() {
+    if (!this.waitingForDiscord) return;
+    this.waitingForDiscord = false;
+
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) {
+      this.hideProgressBar();
+      this.showError('Discord authentication failed');
+      return;
+    }
+
+    const discordUsername = user.user_metadata?.full_name || user.user_metadata?.user_name || 'DiscordUser';
+
+    const { data: profile } = await supabase
+      .from('profiles')
+      .select('username')
+      .eq('id', user.id)
+      .single();
+
+    if (profile?.username) {
+      this.hideProgressBar();
+      this.showSuccess('Authenticated with Discord!');
+      this.authSystem.saveUser({ id: user.id, username: profile.username, type: 'discord' });
+      this.progressComplete(() => this.scene.start(this.returnScene));
+    } else {
+      this.hideProgressBar();
+      this.showDiscordUsernamePrompt(user, discordUsername);
+    }
+  }
+
+  showDiscordUsernamePrompt(user, discordUsername) {
+    this.children.removeAll(true);
+
     const pw = 500;
     const ph = 300;
     const px = (GAME_WIDTH - pw) / 2;
     const py = (GAME_HEIGHT - ph) / 2;
 
+    const panel = this.add.graphics();
+    panel.fillStyle(COLORS.tabletBg, 0.95);
+    panel.fillRoundedRect(px, py, pw, ph, 20);
+    panel.lineStyle(2, COLORS.tabletBorder, 1);
+    panel.strokeRoundedRect(px, py, pw, ph, 20);
+
     this.add.text(GAME_WIDTH / 2, py + 30, 'Choose Username', {
       fontSize: '22px', color: '#ffffff', fontFamily: 'Arial', fontStyle: 'bold',
     }).setOrigin(0.5);
-
-    this.add.text(GAME_WIDTH / 2, py + 70, 'Select how to get your username:', {
+    this.add.text(GAME_WIDTH / 2, py + 65, `Discord: ${discordUsername}`, {
       fontSize: '14px', color: '#aaaaaa', fontFamily: 'Arial',
     }).setOrigin(0.5);
 
-    this.add.text(px + 60, py + 110, 'Option:', {
-      fontSize: '16px', color: '#aaaaaa', fontFamily: 'Arial',
+    let useDiscordName = true;
+    const toggleText = this.add.text(GAME_WIDTH / 2, py + 110, 'Use my Discord username ✅', {
+      fontSize: '16px', color: '#ffffff', fontFamily: 'Arial',
+      backgroundColor: '#2d2d44', padding: { x: 10, y: 5 },
+    }).setOrigin(0.5).setInteractive({ useHandCursor: true });
+
+    toggleText.on('pointerdown', () => {
+      useDiscordName = !useDiscordName;
+      toggleText.setText(useDiscordName ? 'Use my Discord username ✅' : 'Let me create my own username');
+      customInputZone.setVisible(!useDiscordName);
+      customInputBg.setVisible(!useDiscordName);
     });
 
-    let selectedOption = 'discord';
-    let usernameValue = '';
+    const customInputBg = this.add.graphics();
+    customInputBg.fillStyle(0x2d2d44, 1);
+    customInputBg.fillRoundedRect(px + 60, py + 155, pw - 120, 35, 5);
+    customInputBg.setVisible(false);
 
-    const optionBox = this.add.graphics();
-    optionBox.fillStyle(0x2d2d44, 1);
-    optionBox.fillRoundedRect(px + 130, py + 105, 280, 30, 5);
-
-    const optionText = this.add.text(px + 140, py + 120, 'Use my Discord username', {
-      fontSize: '14px', color: '#ffffff', fontFamily: 'Arial',
-    }).setOrigin(0, 0.5);
-
-    const optionHit = this.add.zone(px + 130, py + 105, 280, 30).setInteractive({ useHandCursor: true });
-    optionHit.on('pointerdown', () => {
-      selectedOption = selectedOption === 'discord' ? 'custom' : 'discord';
-      optionText.setText(selectedOption === 'discord' ? 'Use my Discord username' : 'Let me create my own username');
-      if (selectedOption === 'discord') {
-        usernameInput.setVisible(false);
-        usernameBg.setVisible(false);
-      } else {
-        usernameInput.setVisible(true);
-        usernameBg.setVisible(true);
-      }
-    });
-
-    const usernameBg = this.add.graphics();
-    usernameBg.fillStyle(0x2d2d44, 1);
-    usernameBg.fillRoundedRect(px + 60, py + 155, pw - 120, 35, 5);
-    usernameBg.setVisible(false);
-
-    const usernameInput = this.add.text(px + 70, py + 172, '', {
+    let customUsername = '';
+    const customInputText = this.add.text(px + 70, py + 172, '', {
       fontSize: '16px', color: '#ffffff', fontFamily: 'Arial',
     }).setOrigin(0, 0.5).setVisible(false);
 
-    const nextBtn = new RecolorableButton(this, px + 60, py + 220, pw - 120, 40, 'Next', COLORS.buttonGreen, () => {
-      const finalUsername = selectedOption === 'discord' ? authData.discordUsername : usernameValue;
+    const customInputZone = this.add.zone(px + 60 + (pw - 120) / 2, py + 172, pw - 120, 35)
+      .setInteractive({ useHandCursor: true }).setVisible(false);
+
+    customInputZone.on('pointerdown', () => {
+      this.currentInput = { value: customUsername, text: customInputText };
+      this.input.keyboard.on('keydown', (event) => {
+        if (event.key === 'Backspace') customUsername = customUsername.slice(0, -1);
+        else if (event.key.length === 1) customUsername += event.key;
+        customInputText.setText(customUsername);
+      });
+    });
+
+    new RecolorableButton(this, px + 60, py + 220, pw - 120, 40, 'Next', COLORS.buttonGreen, async () => {
+      const finalUsername = useDiscordName ? discordUsername : customUsername;
       if (!finalUsername) { this.showError('Please enter a username'); return; }
-      this.finalizeDiscordAccount(authData, finalUsername);
+
+      const { error } = await supabase.from('profiles').update({
+        username: finalUsername,
+        auth_type: 'discord',
+        discord_username: discordUsername,
+        cash: 100,
+        inventory: [],
+        garden_data: {},
+      }).eq('id', user.id);
+
+      if (error) { this.showError(error.message); return; }
+
+      this.showSuccess('Account created!');
+      this.authSystem.saveUser({ id: user.id, username: finalUsername, type: 'discord' });
+      this.progressComplete(() => this.scene.start(this.returnScene));
     });
   }
 
-  async finalizeDiscordAccount(authData, username) {
-    this.showProgressBar('Finalizing account...');
-    const result = await this.authSystem.createDiscordAccount(authData, username);
-    if (result.success) {
-      this.authSystem.saveUser(result.user);
-      this.progressComplete(() => {
-        this.scene.start(this.returnScene);
-      });
-    } else {
-      this.hideProgressBar();
-      this.showError(result.error || 'Failed to create account');
-    }
-  }
-
   showProgressBar(text) {
+    if (this.progressContainer) this.hideProgressBar();
     this.progressContainer = this.add.container(0, 0);
-    const pw = 300;
-    const ph = 60;
-    const px = (GAME_WIDTH - pw) / 2;
-    const py = GAME_HEIGHT - 80;
+    const pw = 300, ph = 60;
+    const px = (GAME_WIDTH - pw) / 2, py = GAME_HEIGHT - 80;
 
     const bg = this.add.graphics();
     bg.fillStyle(0x000000, 0.8);
@@ -392,47 +439,34 @@ export class AuthScene extends Phaser.Scene {
   }
 
   hideProgressBar() {
-    if (this.progressContainer) {
-      this.progressContainer.destroy();
-      this.progressContainer = null;
-    }
+    if (this.progressContainer) { this.progressContainer.destroy(); this.progressContainer = null; }
   }
 
   progressComplete(callback) {
     if (this.progressBar) {
-      this.progressBar.onComplete(() => {
-        this.hideProgressBar();
-        if (callback) callback();
-      });
-    } else {
-      if (callback) callback();
-    }
+      this.progressBar.onComplete(() => { this.hideProgressBar(); if (callback) callback(); });
+    } else if (callback) { callback(); }
   }
 
   showError(msg) {
-    if (this.errorText) {
-      this.errorText.setText(msg);
-    }
+    if (this.errorText) this.errorText.setText(msg);
   }
 
-  clearMainButtons() {
-    if (this.guestBtn) { this.guestBtn.destroy(); }
-    if (this.discordBtn) { this.discordBtn.destroy(); }
-    if (this.backBtn) { this.backBtn.destroy(); }
+  showSuccess(msg) {
+    const t = this.add.text(GAME_WIDTH / 2, GAME_HEIGHT / 2 + 100, msg, {
+      fontSize: '16px', color: '#4ecca3', fontFamily: 'Arial',
+    }).setOrigin(0.5).setDepth(200);
+    this.time.delayedCall(2000, () => t.destroy());
   }
 
   setupGamepad() {
-    this.input.gamepad.on('connected', (pad) => {
-      this.gamepad = pad;
-    });
+    this.input.gamepad.on('connected', (pad) => { this.gamepad = pad; });
   }
 
   update() {
-    if (this.gamepad) {
-      if (this.gamepad.B) {
-        this.scene.start(this.returnScene);
-        this.gamepad = null;
-      }
+    if (this.gamepad && this.gamepad.B) {
+      this.scene.start(this.returnScene);
+      this.gamepad = null;
     }
   }
 }

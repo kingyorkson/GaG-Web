@@ -3,6 +3,7 @@ import { COLORS, GAME_WIDTH, GAME_HEIGHT, AUTH_TYPES } from '../config/constants
 import { RecolorableButton } from '../ui/RecolorableButton.js';
 import { AuthSystem } from '../systems/AuthSystem.js';
 import { NetworkSystem } from '../systems/NetworkSystem.js';
+import { supabase } from '../systems/SupabaseClient.js';
 
 export class MenuScene extends Phaser.Scene {
   constructor() {
@@ -84,9 +85,26 @@ export class MenuScene extends Phaser.Scene {
     this.profileBtn = null;
   }
 
-  loadUsers() {
-    const saved = this.authSystem.getSavedUsers();
-    this.users = saved;
+  async loadUsers() {
+    const { data: { session } } = await supabase.auth.getSession();
+    if (session?.user) {
+      const { data: profile } = await supabase
+        .from('profiles')
+        .select('username, auth_type, discord_username, cash')
+        .eq('id', session.user.id)
+        .single();
+
+      if (profile) {
+        this.currentUser = {
+          id: session.user.id,
+          username: profile.username,
+          type: profile.auth_type,
+          cash: profile.cash || 100,
+          inventory: [],
+        };
+        this.switchUser(this.currentUser);
+      }
+    }
     this.updateUserUI();
   }
 

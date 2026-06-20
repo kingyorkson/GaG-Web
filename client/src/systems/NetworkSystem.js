@@ -1,130 +1,234 @@
-import { io } from 'socket.io-client';
+import { supabase } from './SupabaseClient.js';
 
 export class NetworkSystem {
   constructor() {
-    this.serverUrl = 'http://localhost:3001';
-    this.socket = null;
-    this.currentServer = null;
-    this.connected = false;
-  }
-
-  connect(token) {
-    return new Promise((resolve) => {
-      this.socket = io(this.serverUrl, {
-        auth: { token },
-        transports: ['websocket'],
-      });
-
-      this.socket.on('connect', () => {
-        this.connected = true;
-        resolve(true);
-      });
-
-      this.socket.on('connect_error', () => {
-        resolve(false);
-      });
-
-      this.socket.on('disconnect', () => {
-        this.connected = false;
-      });
-
-      this.setupListeners();
-    });
-  }
-
-  setupListeners() {
-    this.socket.on('server:joined', (data) => {
-      this.currentServer = data.server;
-      if (this.onServerJoined) this.onServerJoined(data);
-    });
-
-    this.socket.on('server:players', (players) => {
-      if (this.onPlayersUpdate) this.onPlayersUpdate(players);
-    });
-
-    this.socket.on('server:invite', (data) => {
-      if (this.onInviteReceived) this.onInviteReceived(data);
-    });
-
-    this.socket.on('server:invite_response', (data) => {
-      if (this.onInviteResponse) this.onInviteResponse(data);
-    });
-
-    this.socket.on('friend:request', (data) => {
-      if (this.onFriendRequest) this.onFriendRequest(data);
-    });
-
-    this.socket.on('friend:added', (data) => {
-      if (this.onFriendAdded) this.onFriendAdded(data);
-    });
+    this.currentServerId = null;
+    this.channel = null;
+    this.playerPresence = null;
+    this.onPlayersUpdate = null;
+    this.onInviteReceived = null;
+    this.onFriendRequest = null;
   }
 
   async getServers() {
-    try {
-      const res = await fetch(`${this.serverUrl}/api/servers`);
-      return await res.json();
-    } catch {
-      return [];
-    }
+    const { data, error } = await supabase
+      .from('servers')
+      .select('*')
+      .in('type', ['public', 'generated'])
+      .order('created_at', { ascending: false });
+    if (error) return [];
+    return data.map(s => ({
+      id: s.id,
+      name: s.name,
+      type: s.type,
+      ownerName: s.owner_name,
+      playerCount: s.player_data?.length || 0,
+      maxPlayers: s.max_players,
+    }));
   }
 
-  createServer(name, type) {
-    return new Promise((resolve) => {
-      this.socket.emit('server:create', { name, type }, (response) => {
-        resolve(response);
-      });
+  async createServer(name, type) {
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) return { success: false, error: 'Not signed in' };
+
+    const serverId = crypto.randomUUID().slice(0, 8);
+    const isGenerated = !name;
+
+    const server = {
+      id: serverId,
+      name: isGenerated ? `Generated Server ${Math.floor(Math.random() * 9000) + 1000}` : name,
+      type: isGenerated ? 'generated' : (type || 'public'),
+      owner_id: user.id,
+      owner_name: user.user_metadata?.username || 'Unknown',
+      player_data: [{ userId: user.id, username: user.user_metadata?.username || 'Unknown' }],
+      max_players: 8,
+    };
+
+    const { error } = await supabase.from('servers').insert([server]);
+    if (error) return { success: false, error: error.message };
+
+    this.joinRealtimeChannel(server.id);
+    return { success: true, server };
+  }
+
+  async joinServer(serverId) {
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) return { success: false, error: 'Not signed in' };
+
+    const { data: server, error } = await supabase
+      .from('servers')
+      .select('*')
+      .eq('id', serverId)
+      .single();
+
+    if (error || !server) return { success: false, error: 'Server not found' };
+    if (server.player_data.length >= server.max_players) return { success: false, error: 'Server full' };
+    if (server.type === 'private' && server.owner_id !== user.id) return { success: false, error: 'Cannot join private server' };
+
+    const playerEntry = { userId: user.id, username: user.user_metadata?.username || 'Unknown' };
+    const players = [...server.player_data, playerEntry];
+
+    const { error: updateError } = await supabase
+      .from('servers')
+      .update({ player_data: players })
+      .eq('id', serverId);
+
+    if (updateError) return { success: false, error: updateError.message };
+
+    this.joinRealtimeChannel(serverId);
+    return { success: true, server: { ...server, player_data: players } };
+  }
+
+  async leaveServer() {
+    if (!this.currentServerId) return;
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) return;
+
+    const { data: server } = await supabase
+      .from('servers')
+      .select('*')
+      .eq('id', this.currentServerId)
+      .single();
+
+    if (server) {
+      const players = server.player_data.filter(p => p.userId !== user.id);
+      if (players.length === 0) {
+        await supabase.from('servers').delete().eq('id', this.currentServerId);
+      } else {
+        await supabase.from('servers').update({ player_data: players }).eq('id', this.currentServerId);
+      }
+    }
+
+    this.leaveRealtimeChannel();
+  }
+
+  async quickJoin() {
+    const { data: servers } = await supabase
+      .from('servers')
+      .select('*')
+      .in('type', ['public', 'generated'])
+      .order('created_at', { ascending: false });
+
+    const openServer = servers?.find(s => s.player_data.length < s.max_players);
+    if (openServer) {
+      return this.joinServer(openServer.id);
+    }
+
+    return this.createServer(null, 'public');
+  }
+
+  joinRealtimeChannel(serverId) {
+    this.leaveRealtimeChannel();
+    this.currentServerId = serverId;
+
+    this.channel = supabase.channel(`server:${serverId}`, {
+      config: { broadcast: { self: true }, presence: { key: serverId } },
     });
-  }
 
-  joinServer(serverId) {
-    this.socket.emit('server:join', { serverId });
-  }
-
-  leaveServer() {
-    if (this.socket && this.currentServer) {
-      this.socket.emit('server:leave', { serverId: this.currentServer.id });
-      this.currentServer = null;
-    }
-  }
-
-  quickJoin() {
-    return new Promise((resolve) => {
-      this.socket.emit('server:quickjoin', {}, (response) => {
-        resolve(response);
+    this.channel
+      .on('presence', { event: 'sync' }, () => {
+        const state = this.channel.presenceState();
+        const players = Object.values(state).flat().map(p => ({
+          userId: p.userId,
+          username: p.username,
+        }));
+        if (this.onPlayersUpdate) this.onPlayersUpdate(players);
+      })
+      .on('presence', { event: 'join' }, () => {})
+      .on('presence', { event: 'leave' }, () => {})
+      .subscribe(async (status) => {
+        if (status === 'SUBSCRIBED') {
+          const { data: { user } } = await supabase.auth.getUser();
+          await this.channel.track({
+            userId: user?.id,
+            username: user?.user_metadata?.username || 'Unknown',
+            onlineAt: Date.now(),
+          });
+        }
       });
-    });
   }
 
-  sendFriendRequest(username) {
-    this.socket.emit('friend:request', { username });
+  leaveRealtimeChannel() {
+    if (this.channel) {
+      supabase.removeChannel(this.channel);
+      this.channel = null;
+    }
+    this.currentServerId = null;
   }
 
-  acceptFriendRequest(username) {
-    this.socket.emit('friend:accept', { username });
-  }
-
-  inviteFriend(username) {
-    if (this.currentServer) {
-      this.socket.emit('server:invite', { username, serverId: this.currentServer.id });
+  broadcastGardenUpdate(gardenData) {
+    if (this.channel) {
+      this.channel.send({
+        type: 'broadcast',
+        event: 'garden:update',
+        payload: gardenData,
+      });
     }
   }
 
-  respondToInvite(accept, fromPlayer) {
-    this.socket.emit('server:invite_response', { accept, fromPlayer });
+  async sendFriendRequest(username) {
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) return;
+
+    const { data: targetUser } = await supabase
+      .from('users')
+      .select('id')
+      .eq('username', username)
+      .single();
+
+    if (!targetUser) return;
+
+    await supabase.from('friend_requests').insert([{
+      from_user_id: user.id,
+      to_user_id: targetUser.id,
+      status: 'pending',
+    }]);
   }
 
-  updateGarden(gardenData) {
-    if (this.socket && this.currentServer) {
-      this.socket.emit('garden:update', { serverId: this.currentServer.id, gardenData });
-    }
+  async acceptFriendRequest(fromUserId) {
+    await supabase
+      .from('friend_requests')
+      .update({ status: 'accepted' })
+      .eq('from_user_id', fromUserId)
+      .eq('to_user_id', (await supabase.auth.getUser()).data.user?.id);
+
+    await supabase.from('friends').insert([
+      { user_id: fromUserId, friend_id: (await supabase.auth.getUser()).data.user?.id },
+    ]);
+  }
+
+  async getFriends() {
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) return [];
+
+    const { data } = await supabase
+      .from('friends')
+      .select('friend_id, users!friends_friend_id_fkey(username)')
+      .eq('user_id', user.id);
+
+    return (data || []).map(f => ({
+      id: f.friend_id,
+      username: f.users?.username,
+    }));
+  }
+
+  async getPendingFriendRequests() {
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) return [];
+
+    const { data } = await supabase
+      .from('friend_requests')
+      .select('from_user_id, users!friend_requests_from_user_id_fkey(username)')
+      .eq('to_user_id', user.id)
+      .eq('status', 'pending');
+
+    return (data || []).map(r => ({
+      id: r.from_user_id,
+      username: r.users?.username,
+    }));
   }
 
   disconnect() {
-    this.leaveServer();
-    if (this.socket) {
-      this.socket.disconnect();
-      this.socket = null;
-    }
-    this.connected = false;
+    this.leaveRealtimeChannel();
   }
 }

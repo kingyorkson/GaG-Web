@@ -1,92 +1,79 @@
 # Growing & Gardening 2D - Setup Guide
 
+## Architecture
+The game uses **Supabase** for everything - no custom server needed:
+- **Auth**: Guest accounts (email/password) + Discord OAuth
+- **Database**: User profiles, servers, friends, gardens
+- **Multiplayer**: Supabase Realtime channels
+
 ## Quick Start
 
-### 1. Install Dependencies
+### 1. Install client dependencies
 ```bash
-# Client (game)
 cd client
 npm install
-
-# Server (backend)
-cd ../server
-npm install
-
-# Windows (Electron)
-cd ../windows
-npm install
-
-# iOS (Capacitor)
-cd ../ios
-npm install
 ```
 
-### 2. Configure Environment
-Copy `server/.env.example` to `server/.env` and fill in your credentials:
-- Supabase URL and keys (from supabase.com)
-- Discord bot credentials (from discord.com/developers)
-- A JWT secret for auth tokens
-
-### 3. Setup Supabase Database
-- Go to your Supabase project dashboard
-- Open the SQL editor
-- Run the contents of `server/src/schema.sql`
-
-### 4. Run the Server
-```bash
-cd server
-npm run dev
-```
-
-### 5. Run the Game Client
+### 2. Run the game
 ```bash
 cd client
 npm run dev
 ```
-Open http://localhost:3000 in your browser.
+Open **http://localhost:3000** in your browser.
 
-## Platform Builds
+## Supabase Setup (One Time)
 
-### Web (GitHub Pages)
+### 1. Enable Discord Auth
+In your Supabase dashboard:
+- Go to **Authentication** → **Providers**
+- Click **Discord** and enable it
+- Enter your Discord Client ID and Secret (from discord.com/developers)
+- Set the redirect URL to: `https://cqohfidpjiudduoqcppv.supabase.co/auth/v1/callback`
+
+### 2. Run the Database Schema
+- Go to **SQL Editor** in Supabase
+- Copy-paste the contents of `server/src/schema.sql`
+- Click **Run**
+
+### 3. Enable Realtime
+- Go to **Database** → **Replication**
+- Make sure the `servers` table is in the `supabase_realtime` publication
+
+## Deploy to Web (GitHub Pages)
+
 ```bash
 cd client
 npm run build
 ```
-The built files will be in `web/dist/`. Push to GitHub and use the Actions workflow to deploy to Pages.
+The built files go to `web/dist/`. Push to GitHub and the Actions workflow auto-deploys to Pages.
+
+## Platform Builds
 
 ### Windows (Electron)
 ```bash
 cd client
 npm run build
 cd ../windows
-npm start    # Run in dev mode
-npm run build  # Create installer
+npm start
 ```
 
 ### iOS (Capacitor)
-First build the web client:
 ```bash
 cd client
 npm run build
 cd ../ios
 npx cap sync
-npx cap open ios   # Open in Xcode
+npx cap open ios
 ```
 
 ## Assets to Add
-Place these files in `client/assets/`:
-- **images/tablet_bg.png** - Background image for tablet/main menu
-- **images/slot_bg.png** - Inventory slot background
+Place these in `client/assets/`:
+- **images/tablet_bg.png** - Background for main menu
+- **images/slot_bg.png** - Inventory slot graphic
 - **video/tablet_bootup.mp4** - Boot animation video
 
 ## Controller Support
-Controllers work on all platforms:
-- **Windows**: Xbox/PlayStation controllers via Electron
-- **Web**: Gamepad API (Chrome, Edge, Firefox)
-- **iOS**: MFi controllers via Safari
-
-Key mappings:
+Supported on all platforms via the Gamepad API:
 - `X / Square` - Open Tablet
 - `B / Circle` - Back / Close
-- `A / Cross` - Confirm / Select
-- `START` - Pause menu
+- `A / Cross` - Confirm
