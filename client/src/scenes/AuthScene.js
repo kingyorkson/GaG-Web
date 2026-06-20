@@ -4,6 +4,7 @@ import { RecolorableButton } from '../ui/RecolorableButton.js';
 import { AuthSystem } from '../systems/AuthSystem.js';
 import { supabase } from '../systems/SupabaseClient.js';
 import { ProgressBar } from '../ui/ProgressBar.js';
+import { InAppBrowser } from '../systems/InAppBrowser.js';
 
 export class AuthScene extends Phaser.Scene {
   constructor() {
@@ -24,18 +25,6 @@ export class AuthScene extends Phaser.Scene {
   }
 
   setupAuthListener() {
-    window.addEventListener('message', async (event) => {
-      if (event.data?.type !== 'supabase-auth') return;
-      if (event.data.hash && event.origin === window.location.origin) {
-        const q = new URLSearchParams(event.data.hash.replace('#', '?'));
-        const at = q.get('access_token');
-        const rt = q.get('refresh_token');
-        if (at && rt) {
-          await supabase.auth.setSession({ access_token: at, refresh_token: rt });
-        }
-      }
-      this.handleDiscordCallback();
-    });
   }
 
   createAuthScreen() {
@@ -303,19 +292,30 @@ export class AuthScene extends Phaser.Scene {
       fontSize: '20px', color: '#ffffff', fontFamily: 'Arial',
     }).setOrigin(0.5).setDepth(50);
 
-    const msg = this.add.text(GAME_WIDTH / 2, GAME_HEIGHT / 2 + 15, 'A new tab will open. Complete login there, then return here.', {
-      fontSize: '14px', color: '#aaaaaa', fontFamily: 'Arial',
-    }).setOrigin(0.5).setDepth(50);
-
     this.showProgressBar('Waiting for Discord...');
 
     const result = await this.authSystem.loginWithDiscord();
-    if (result.success) {
-      window.open(result.url, '_blank');
-      this.waitingForDiscord = true;
-    } else {
+    if (!result.success) {
       this.hideProgressBar();
       this.showError(result.error || 'Failed to start Discord auth');
+      return;
+    }
+
+    this.browser = new InAppBrowser();
+    this.waitingForDiscord = true;
+    const hash = await this.browser.open(result.url);
+
+    if (hash) {
+      const q = new URLSearchParams(hash.replace('#', '?'));
+      const at = q.get('access_token');
+      const rt = q.get('refresh_token');
+      if (at && rt) {
+        await supabase.auth.setSession({ access_token: at, refresh_token: rt });
+      }
+      this.handleDiscordCallback();
+    } else {
+      this.hideProgressBar();
+      this.showError('Authentication was cancelled');
     }
   }
 
