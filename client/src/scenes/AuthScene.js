@@ -522,7 +522,12 @@ export class AuthScene extends Phaser.Scene {
           this.startDiscordAuth();
         });
       } else {
-        await this.authSystem.linkDiscordAccount(profile.username, discordUsername);
+        const linkResult = await this.authSystem.linkDiscordAccount(profile.username, discordUsername);
+        if (!linkResult.success) {
+          this.hideProgressBar();
+          this.showError('Failed to save user: ' + (linkResult.error || 'unknown'));
+          return;
+        }
         this.showSuccess('Authenticated with Discord!');
         this.authSystem.saveUser({ id: user.id, username: profile.username, type: 'discord' });
         this.progressComplete(() => this.scene.start(this.returnScene));
@@ -604,7 +609,11 @@ export class AuthScene extends Phaser.Scene {
 
       if (error) { this.showError(error.message); return; }
 
-      await this.authSystem.linkDiscordAccount(finalUsername, discordUsername);
+      const linkResult = await this.authSystem.linkDiscordAccount(finalUsername, discordUsername);
+      if (!linkResult.success) {
+        this.showError('Failed to save user: ' + (linkResult.error || 'unknown'));
+        return;
+      }
 
       this.showSuccess('Account created!');
       this.authSystem.saveUser({ id: user.id, username: finalUsername, type: 'discord' });
