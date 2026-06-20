@@ -5,6 +5,15 @@ import { AuthSystem } from '../systems/AuthSystem.js';
 import { NetworkSystem } from '../systems/NetworkSystem.js';
 import { supabase } from '../systems/SupabaseClient.js';
 
+const DEPTH = {
+  BG: 0,
+  CONTAINER: 5,
+  FRAME: 10,
+  CONTENT: 20,
+  BUTTONS: 30,
+  OVERLAY: 100,
+};
+
 export class MenuScene extends Phaser.Scene {
   constructor() {
     super({ key: 'MenuScene' });
@@ -19,10 +28,11 @@ export class MenuScene extends Phaser.Scene {
     this.cameras.main.setBackgroundColor(COLORS.background);
 
     if (this.textures.exists('tablet_bg')) {
-      this.add.image(GAME_WIDTH / 2, GAME_HEIGHT / 2, 'tablet_bg').setDisplaySize(GAME_WIDTH, GAME_HEIGHT).setAlpha(0.3);
+      this.add.image(GAME_WIDTH / 2, GAME_HEIGHT / 2, 'tablet_bg')
+        .setDisplaySize(GAME_WIDTH, GAME_HEIGHT).setAlpha(0.3).setDepth(DEPTH.BG);
     }
 
-    this.tabletContainer = this.add.container(0, 0);
+    this.tabletContainer = this.add.container(0, 0).setDepth(DEPTH.CONTAINER);
     this.createTabletFrame();
     this.createMenuContent();
 
@@ -36,7 +46,7 @@ export class MenuScene extends Phaser.Scene {
     const tx = (GAME_WIDTH - tw) / 2;
     const ty = (GAME_HEIGHT - th) / 2;
 
-    const g = this.add.graphics();
+    const g = this.add.graphics().setDepth(DEPTH.FRAME);
     g.fillStyle(COLORS.tabletBg, 0.95);
     g.fillRoundedRect(tx, ty, tw, th, 20);
     g.lineStyle(3, COLORS.tabletBorder, 1);
@@ -56,7 +66,7 @@ export class MenuScene extends Phaser.Scene {
       color: '#ffffff',
       fontFamily: 'Arial',
       fontStyle: 'bold',
-    }).setOrigin(0.5);
+    }).setOrigin(0.5).setDepth(DEPTH.CONTENT);
 
     const btnW = 260;
     const btnH = 55;
@@ -130,7 +140,7 @@ export class MenuScene extends Phaser.Scene {
 
   openProfileMenu() {
     const bounds = this.tabletBounds;
-    const overlay = this.add.graphics();
+    const overlay = this.add.graphics().setDepth(DEPTH.OVERLAY);
     overlay.fillStyle(0x000000, 0.7);
     overlay.fillRect(0, 0, GAME_WIDTH, GAME_HEIGHT);
 
@@ -139,7 +149,7 @@ export class MenuScene extends Phaser.Scene {
     const px = (GAME_WIDTH - pw) / 2;
     const py = (GAME_HEIGHT - ph) / 2;
 
-    const panel = this.add.graphics();
+    const panel = this.add.graphics().setDepth(DEPTH.OVERLAY);
     panel.fillStyle(COLORS.tabletBg, 0.95);
     panel.fillRoundedRect(px, py, pw, ph, 15);
     panel.lineStyle(2, COLORS.tabletBorder, 1);
@@ -147,7 +157,7 @@ export class MenuScene extends Phaser.Scene {
 
     const titleText = this.add.text(GAME_WIDTH / 2, py + 25, 'Accounts', {
       fontSize: '22px', color: '#ffffff', fontFamily: 'Arial', fontStyle: 'bold',
-    }).setOrigin(0.5);
+    }).setOrigin(0.5).setDepth(DEPTH.OVERLAY);
 
     const accountsContainer = this.add.container(0, 0);
     let yOff = py + 60;

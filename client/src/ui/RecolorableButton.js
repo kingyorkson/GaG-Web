@@ -2,7 +2,7 @@ import Phaser from 'phaser';
 import { COLORS } from '../config/constants.js';
 
 export class RecolorableButton {
-  constructor(scene, x, y, w, h, label, color, callback) {
+  constructor(scene, x, y, w, h, label, color, callback, depth) {
     this.scene = scene;
     this.x = x;
     this.y = y;
@@ -16,7 +16,12 @@ export class RecolorableButton {
     this.visible = true;
 
     this.container = scene.add.container(0, 0);
+    if (depth !== undefined) this.container.setDepth(depth);
     this.build();
+  }
+
+  setDepth(depth) {
+    this.container.setDepth(depth);
   }
 
   build() {

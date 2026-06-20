@@ -5,6 +5,20 @@ import { RecolorableButton } from '../ui/RecolorableButton.js';
 import { InventoryUI } from '../ui/InventoryUI.js';
 import { GrowthSystem } from '../systems/GrowthSystem.js';
 
+const DEPTH = {
+  BACKGROUND: 0,
+  GRAPHICS: 10,
+  PLANTS: 20,
+  ZONES: 25,
+  HOVER: 30,
+  UI_BG: 40,
+  UI: 50,
+  BUTTONS: 60,
+  ARROWS: 65,
+  OVERLAY: 100,
+  POPUP: 200,
+};
+
 export class GardenScene extends Phaser.Scene {
   constructor() {
     super({ key: 'GardenScene' });
@@ -19,7 +33,8 @@ export class GardenScene extends Phaser.Scene {
 
   create() {
     this.growthSystem = new GrowthSystem();
-    this.gardenPlots = [];
+    this.gardens = [];
+    this.currentGardenIndex = 0;
     this.placedProps = [];
     this.tabletOpen = false;
     this.inventoryOpen = false;
@@ -27,17 +42,28 @@ export class GardenScene extends Phaser.Scene {
     this.cash = 100;
 
     this.cameras.main.fadeIn(500, 0, 0, 0);
-    this.createGarden();
+    this.createGarden(0);
     this.createUI();
     this.setupGamepad();
     this.processOfflineGrowth();
   }
 
-  createGarden() {
-    const g = this.add.graphics();
+  createGarden(index) {
+    this.gardens[index] = this.gardens[index] || this.createGardenData();
+    const garden = this.gardens[index];
 
+    if (this.gardenContainer) this.gardenContainer.destroy();
+    if (this.plotContainer) this.plotContainer.destroy();
+    if (this.plantContainer) this.plantContainer.destroy();
+
+    this.gardenContainer = this.add.container(0, 0).setDepth(DEPTH.BACKGROUND);
+    this.plotContainer = this.add.container(0, 0).setDepth(DEPTH.ZONES);
+    this.plantContainer = this.add.container(0, 0).setDepth(DEPTH.PLANTS);
+
+    const g = this.add.graphics();
     g.fillStyle(COLORS.grass, 1);
     g.fillRect(0, 0, GAME_WIDTH, GAME_HEIGHT);
+    this.gardenContainer.add(g);
 
     const plotSize = 80;
     const cols = 8;
@@ -45,53 +71,99 @@ export class GardenScene extends Phaser.Scene {
     const startX = (GAME_WIDTH - cols * plotSize) / 2;
     const startY = (GAME_HEIGHT - rows * plotSize) / 2;
 
-    g.fillStyle(COLORS.soil, 1);
+    const soilG = this.add.graphics();
+    soilG.fillStyle(COLORS.soil, 1);
     for (let row = 0; row < rows; row++) {
       for (let col = 0; col < cols; col++) {
         const x = startX + col * plotSize;
         const y = startY + row * plotSize;
-        g.fillRoundedRect(x + 2, y + 2, plotSize - 4, plotSize - 4, 5);
-        this.gardenPlots.push({ x, y, w: plotSize, h: plotSize, plant: null, row, col });
+        soilG.fillRoundedRect(x + 2, y + 2, plotSize - 4, plotSize - 4, 5);
       }
     }
+    this.gardenContainer.add(soilG);
 
-    this.gardenPlots.forEach(plot => {
+    garden.plots.forEach(plot => {
       const zone = this.add.zone(plot.x + plot.w / 2, plot.y + plot.h / 2, plot.w, plot.h)
         .setInteractive({ useHandCursor: true });
       zone.on('pointerdown', () => this.onPlotClick(plot));
       zone.on('pointerover', () => this.onPlotHover(plot, true));
       zone.on('pointerout', () => this.onPlotHover(plot, false));
       plot.zone = zone;
+      this.plotContainer.add(zone);
+
+      if (plot.plant) {
+        this.renderPlant(plot);
+      }
     });
 
-    this.plotHighlight = this.add.graphics();
+    this.plotHighlight = this.add.graphics().setDepth(DEPTH.HOVER);
     this.plotHighlight.setVisible(false);
 
-    this.plantSprites = [];
     this.hoverText = this.add.text(0, 0, '', {
       fontSize: '14px', color: '#ffffff', fontFamily: 'Arial',
       backgroundColor: '#000000aa', padding: { x: 5, y: 3 },
-    }).setVisible(false).setDepth(100);
+    }).setVisible(false).setDepth(DEPTH.OVERLAY);
+  }
+
+  createGardenData() {
+    const plotSize = 80;
+    const cols = 8;
+    const rows = 6;
+    const startX = (GAME_WIDTH - cols * plotSize) / 2;
+    const startY = (GAME_HEIGHT - rows * plotSize) / 2;
+    const plots = [];
+
+    for (let row = 0; row < rows; row++) {
+      for (let col = 0; col < cols; col++) {
+        const x = startX + col * plotSize;
+        const y = startY + row * plotSize;
+        plots.push({ x, y, w: plotSize, h: plotSize, plant: null, row, col });
+      }
+    }
+
+    return { plots, name: `Garden ${this.gardens.length + 1}` };
+  }
+
+  get currentGarden() {
+    return this.gardens[this.currentGardenIndex];
+  }
+
+  get gardenPlots() {
+    return this.currentGarden ? this.currentGarden.plots : [];
   }
 
   createUI() {
-    this.gardenUI = this.add.container(0, 0).setDepth(50);
+    this.gardenUI = this.add.container(0, 0).setDepth(DEPTH.UI);
 
-    this.tabletBtn = new RecolorableButton(this, 10, 10, 90, 35, 'Tablet', COLORS.buttonGray, () => {
-      this.openTablet();
-    });
+    const isTouchDevice = 'ontouchstart' in window || navigator.maxTouchPoints > 0;
 
-    this.inventoryArrow = this.add.graphics();
+    if (isTouchDevice) {
+      this.tabletBtn = new RecolorableButton(this, 10, 10, 90, 35, 'Tablet', COLORS.buttonGray, () => {
+        this.openTablet();
+      });
+    }
+
+    if (this.mode !== 'single') {
+      this.navLeftBtn = new RecolorableButton(this, 5, GAME_HEIGHT / 2 - 20, 40, 40, '<', COLORS.buttonGray, () => {
+        this.navigateGarden(-1);
+      });
+      this.navRightBtn = new RecolorableButton(this, GAME_WIDTH - 45, GAME_HEIGHT / 2 - 20, 40, 40, '>', COLORS.buttonGray, () => {
+        this.navigateGarden(1);
+      });
+    }
+
+    this.inventoryArrow = this.add.graphics().setDepth(DEPTH.UI_BG);
     const arrowX = GAME_WIDTH / 2 - 25;
     const arrowY = GAME_HEIGHT - 30;
     this.inventoryArrow.fillStyle(COLORS.buttonGray, 0.8);
     this.inventoryArrow.fillRoundedRect(arrowX, arrowY, 50, 25, 5);
     const arrowZone = this.add.zone(GAME_WIDTH / 2, arrowY + 12, 50, 25)
-      .setInteractive({ useHandCursor: true });
+      .setInteractive({ useHandCursor: true }).setDepth(DEPTH.BUTTONS);
     arrowZone.on('pointerdown', () => this.toggleInventory());
-    this.add.text(GAME_WIDTH / 2, arrowY + 12, '▲', {
+    this.gardenUI.add(arrowZone);
+    const arrowLabel = this.add.text(GAME_WIDTH / 2, arrowY + 12, '▲', {
       fontSize: '12px', color: '#ffffff', fontFamily: 'Arial',
-    }).setOrigin(0.5);
+    }).setOrigin(0.5).setDepth(DEPTH.UI_BG);
 
     this.collectAllBtn = new RecolorableButton(this, GAME_WIDTH - 120, GAME_HEIGHT - 50, 110, 35, 'Collect All', COLORS.buttonGreen, () => {
       this.collectAllHarvest();
@@ -99,16 +171,24 @@ export class GardenScene extends Phaser.Scene {
 
     this.cashText = this.add.text(GAME_WIDTH / 2, 15, `$${this.cash}`, {
       fontSize: '20px', color: '#ffd700', fontFamily: 'Arial', fontStyle: 'bold',
-    }).setOrigin(0.5).setDepth(100);
+    }).setOrigin(0.5).setDepth(DEPTH.OVERLAY);
+  }
+
+  navigateGarden(direction) {
+    const newIndex = this.currentGardenIndex + direction;
+    if (newIndex < 0 || newIndex >= this.gardens.length) return;
+    this.currentGardenIndex = newIndex;
+    this.createGarden(newIndex);
   }
 
   openTablet() {
+    if (this.tabletOpen) return;
     if (this.inventoryOpen) this.toggleInventory();
     this.tabletOpen = true;
 
     if (this.textures.exists('tablet_bootup')) {
       const video = this.add.video(GAME_WIDTH / 2, GAME_HEIGHT / 2, 'tablet_bootup');
-      video.setDepth(200);
+      video.setDepth(DEPTH.POPUP + 10);
       video.play();
       video.once('complete', () => {
         video.destroy();
@@ -207,38 +287,43 @@ export class GardenScene extends Phaser.Scene {
   }
 
   renderPlant(plot) {
-    if (plot.plant && plot.plant.type === 'seed') {
-      const cx = plot.x + plot.w / 2;
-      const cy = plot.y + plot.h / 2;
-      const texKey = `seed_${plot.plant.seedId}`;
+    if (!plot.plant || plot.plant.type !== 'seed') return;
+    const cx = plot.x + plot.w / 2;
+    const cy = plot.y + plot.h / 2;
+    const texKey = `seed_${plot.plant.seedId}`;
+    let graphic;
 
-      if (this.textures.exists(texKey)) {
-        const img = this.add.image(cx, cy, texKey).setDisplaySize(plot.w - 10, plot.h - 10);
-        if (plot.plant.grown) {
-          img.setTint(0xffffff);
-          const border = this.add.graphics();
-          border.lineStyle(2, 0xffd700, 1);
-          border.strokeCircle(cx, cy, plot.w / 2 - 5);
-          plot.plant.graphics = this.add.container(0, 0, [border, img]);
-        } else {
-          img.setTint(0xaaaaaa);
-          plot.plant.graphics = img;
-        }
+    if (this.textures.exists(texKey)) {
+      const img = this.add.image(cx, cy, texKey).setDisplaySize(plot.w - 10, plot.h - 10);
+      if (plot.plant.grown) {
+        img.setTint(0xffffff);
+        const border = this.add.graphics();
+        border.lineStyle(2, 0xffd700, 1);
+        border.strokeCircle(cx, cy, plot.w / 2 - 5);
+        graphic = this.add.container(0, 0, [border, img]);
       } else {
-        const g = this.add.graphics();
-        if (plot.plant.grown) {
-          g.fillStyle(0x2ecc71, 1);
-          g.fillCircle(cx, cy, 20);
-          g.fillStyle(0xe74c3c, 1);
-          g.fillCircle(cx, cy, 10);
-        } else {
-          g.fillStyle(0x27ae60, 1);
-          g.fillCircle(cx, cy, 10);
-          g.fillStyle(0x2ecc71, 1);
-          g.fillCircle(cx, cy - 5, 5);
-        }
-        plot.plant.graphics = g;
+        img.setTint(0xaaaaaa);
+        graphic = img;
       }
+    } else {
+      const g = this.add.graphics();
+      if (plot.plant.grown) {
+        g.fillStyle(0x2ecc71, 1);
+        g.fillCircle(cx, cy, 20);
+        g.fillStyle(0xe74c3c, 1);
+        g.fillCircle(cx, cy, 10);
+      } else {
+        g.fillStyle(0x27ae60, 1);
+        g.fillCircle(cx, cy, 10);
+        g.fillStyle(0x2ecc71, 1);
+        g.fillCircle(cx, cy - 5, 5);
+      }
+      graphic = g;
+    }
+
+    if (graphic) {
+      this.plantContainer.add(graphic);
+      plot.plant.graphics = graphic;
     }
   }
 
@@ -279,16 +364,31 @@ export class GardenScene extends Phaser.Scene {
   showPlantInfo(plot) {
     if (!plot.plant || !plot.plant.harvestable) return;
 
-    this.add.text(GAME_WIDTH / 2, GAME_HEIGHT / 2 - 50, `Harvest ${plot.plant.name}?`, {
+    if (this.harvestPopup) this.harvestPopup.forEach(o => o.destroy());
+    this.harvestPopup = [];
+
+    const overlay = this.add.graphics().setDepth(DEPTH.POPUP);
+    overlay.fillStyle(0x000000, 0.5);
+    overlay.fillRect(0, 0, GAME_WIDTH, GAME_HEIGHT);
+    this.harvestPopup.push(overlay);
+
+    const msg = this.add.text(GAME_WIDTH / 2, GAME_HEIGHT / 2 - 50, `Harvest ${plot.plant.name}?`, {
       fontSize: '20px', color: '#ffffff', fontFamily: 'Arial',
-    }).setOrigin(0.5);
+    }).setOrigin(0.5).setDepth(DEPTH.POPUP);
+    this.harvestPopup.push(msg);
 
     const hBtn = new RecolorableButton(this, GAME_WIDTH / 2 - 60, GAME_HEIGHT / 2, 50, 30, '✓', COLORS.buttonGreen, () => {
       this.harvestPlant(plot);
+      if (this.harvestPopup) this.harvestPopup.forEach(o => o.destroy());
+      this.harvestPopup = null;
     });
+    this.harvestPopup.push(hBtn);
+
     const cBtn = new RecolorableButton(this, GAME_WIDTH / 2 + 10, GAME_HEIGHT / 2, 50, 30, 'X', COLORS.danger, () => {
-      hBtn.destroy(); cBtn.destroy();
+      if (this.harvestPopup) this.harvestPopup.forEach(o => o.destroy());
+      this.harvestPopup = null;
     });
+    this.harvestPopup.push(cBtn);
   }
 
   harvestPlant(plot) {
@@ -365,8 +465,12 @@ export class GardenScene extends Phaser.Scene {
     });
 
     if (this.gamepad) {
-      if (this.gamepad.X) {
+      if (this.gamepad.X && !this.tabletOpen) {
         this.openTablet();
+        this.gamepad = null;
+      }
+      if (this.gamepad.B && this.tabletOpen) {
+        this.closeTablet();
         this.gamepad = null;
       }
     }
