@@ -163,7 +163,7 @@ export class MenuScene extends Phaser.Scene {
     overlay.fillRect(0, 0, GAME_WIDTH, GAME_HEIGHT);
 
     const pw = 400;
-    const ph = 300;
+    const ph = 350;
     const px = (GAME_WIDTH - pw) / 2;
     const py = (GAME_HEIGHT - ph) / 2;
 
@@ -183,24 +183,96 @@ export class MenuScene extends Phaser.Scene {
     this.users.forEach((user, idx) => {
       const isActive = this.currentUser && this.currentUser.id === user.id;
       const bgColor = user.type === AUTH_TYPES.DISCORD ? COLORS.buttonDiscord : COLORS.buttonGray;
-      const btn = new RecolorableButton(this, px + 20, yOff, pw - 40, 40, user.username, isActive ? COLORS.buttonGreenOutline : bgColor, () => {
+      const btn = new RecolorableButton(this, px + 20, yOff, pw - 80, 40, user.username, isActive ? COLORS.buttonGreenOutline : bgColor, () => {
         this.switchUser(user);
         this.cleanupOverlay([overlay, panel, titleText, accountsContainer]);
       });
       if (isActive) {
         btn.setOutlineOnly(true);
       }
+
+      const delBtn = new RecolorableButton(this, px + pw - 55, yOff + 2, 32, 36, 'X', COLORS.danger, () => {
+        this.cleanupOverlay([overlay, panel, titleText, accountsContainer]);
+        this.confirmDeleteAccount(user);
+      });
       yOff += 50;
     });
 
-    const addBtn = new RecolorableButton(this, px + 20, py + ph - 50, pw - 40, 35, 'Add Account', COLORS.buttonGray, () => {
+    const addBtn = new RecolorableButton(this, px + 20, py + ph - 95, pw - 40, 35, 'Add Account', COLORS.buttonGray, () => {
       this.cleanupOverlay([overlay, panel, titleText, accountsContainer]);
       this.scene.start('AuthScene', { returnScene: 'MenuScene' });
     });
 
-    const closeBtn = new RecolorableButton(this, px + pw - 50, py + 10, 35, 35, 'X', COLORS.danger, () => {
-      this.cleanupOverlay([overlay, panel, titleText, accountsContainer, addBtn, closeBtn]);
+    const signOutBtn = new RecolorableButton(this, px + 20, py + ph - 50, pw - 40, 35, 'Sign Out', COLORS.danger, () => {
+      this.cleanupOverlay([overlay, panel, titleText, accountsContainer]);
+      this.signOut();
     });
+
+    const closeBtn = new RecolorableButton(this, px + pw - 50, py + 10, 35, 35, 'X', COLORS.danger, () => {
+      this.cleanupOverlay([overlay, panel, titleText, accountsContainer, addBtn, signOutBtn, closeBtn]);
+    });
+  }
+
+  async confirmDeleteAccount(user) {
+    const overlay = this.add.graphics().setDepth(DEPTH.OVERLAY + 10);
+    overlay.fillStyle(0x000000, 0.8);
+    overlay.fillRect(0, 0, GAME_WIDTH, GAME_HEIGHT);
+
+    const pw = 320;
+    const ph = 180;
+    const px = (GAME_WIDTH - pw) / 2;
+    const py = (GAME_HEIGHT - ph) / 2;
+
+    const panel = this.add.graphics().setDepth(DEPTH.OVERLAY + 10);
+    panel.fillStyle(COLORS.tabletBg, 0.95);
+    panel.fillRoundedRect(px, py, pw, ph, 15);
+    panel.lineStyle(2, COLORS.tabletBorder, 1);
+    panel.strokeRoundedRect(px, py, pw, ph, 15);
+
+    const msg = this.add.text(GAME_WIDTH / 2, py + 40, `Delete "${user.username}"?\nThis cannot be undone.`, {
+      fontSize: '16px', color: '#ffffff', fontFamily: 'Arial', align: 'center',
+    }).setOrigin(0.5, 0.5).setDepth(DEPTH.OVERLAY + 20);
+
+    const yesBtn = new RecolorableButton(this, px + 30, py + 110, 120, 40, 'Delete', COLORS.danger, async () => {
+      this.cleanupOverlay([overlay, panel, msg, yesBtn, noBtn]);
+      await this.deleteAccount(user);
+    });
+
+    const noBtn = new RecolorableButton(this, px + pw - 150, py + 110, 120, 40, 'Cancel', COLORS.buttonGray, () => {
+      this.cleanupOverlay([overlay, panel, msg, yesBtn, noBtn]);
+      this.openProfileMenu();
+    });
+  }
+
+  async deleteAccount(user) {
+    const { data: { session } } = await supabase.auth.getSession();
+    if (!session) return;
+
+    const { error } = await supabase.rpc('delete_user_account');
+    if (error) {
+      this.showMessage('Failed to delete account');
+      return;
+    }
+
+    if (this.currentUser && this.currentUser.id === user.id) {
+      await supabase.auth.signOut();
+      this.currentUser = null;
+      this.users = this.users.filter(u => u.id !== user.id);
+      this.switchUser(null);
+      this.updateUserUI();
+    } else {
+      this.users = this.users.filter(u => u.id !== user.id);
+    }
+
+    this.showMessage('Account deleted');
+  }
+
+  async signOut() {
+    await supabase.auth.signOut();
+    this.currentUser = null;
+    this.switchUser(null);
+    this.updateUserUI();
+    this.showMessage('Signed out');
   }
 
   async openQRCodeModal() {
@@ -236,8 +308,18 @@ export class MenuScene extends Phaser.Scene {
       .insert({ code, user_id: user.id });
 
     if (insertError) {
-      this.showMessage('Failed to connect - try again');
-      this.cleanupOverlay([overlay, panel, titleText]);
+      const errText = this.add.text(GAME_WIDTH / 2, py + 120, 'Server error - try again', {
+        fontSize: '18px', color: '#ff4444', fontFamily: 'Arial',
+      }).setOrigin(0.5).setDepth(DEPTH.OVERLAY + 20);
+
+      const retryBtn = new RecolorableButton(this, GAME_WIDTH / 2 - 60, py + 180, 120, 35, 'Retry', COLORS.buttonGray, () => {
+        this.cleanupOverlay([overlay, panel, titleText, errText, retryBtn, closeBtn]);
+        this.openQRCodeModal();
+      });
+
+      const closeBtn = new RecolorableButton(this, px + pw - 50, py + 10, 35, 35, 'X', COLORS.danger, () => {
+        this.cleanupOverlay([overlay, panel, titleText, errText, retryBtn, closeBtn]);
+      });
       return;
     }
 
@@ -262,8 +344,13 @@ export class MenuScene extends Phaser.Scene {
 
   switchUser(user) {
     this.currentUser = user;
-    this.multiplayerBtn.setDisabled(false);
-    this.multiplayerBtn.setColor(COLORS.buttonGreen);
+    if (user) {
+      this.multiplayerBtn.setDisabled(false);
+      this.multiplayerBtn.setColor(COLORS.buttonGreen);
+    } else {
+      this.multiplayerBtn.setDisabled(true);
+      this.multiplayerBtn.setColor(COLORS.buttonGray);
+    }
     this.updateUserUI();
   }
 

@@ -243,6 +243,18 @@ DO $$ BEGIN
   END IF;
 END $$;
 
+-- RPC: delete own user account (authenticated user deletes their row)
+CREATE OR REPLACE FUNCTION delete_user_account()
+RETURNS BOOLEAN
+LANGUAGE plpgsql SECURITY DEFINER
+SET search_path = public
+AS $$
+BEGIN
+  DELETE FROM users WHERE id = auth.uid();
+  RETURN FOUND;
+END;
+$$;
+
 -- RPC: authenticate with 6-digit code (no auth required - code is the key)
 CREATE OR REPLACE FUNCTION authenticate_with_code(code_text TEXT)
 RETURNS JSONB
