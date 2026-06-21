@@ -157,89 +157,64 @@ export class MenuScene extends Phaser.Scene {
   }
 
   openProfileMenu() {
-    const bounds = this.tabletBounds;
     const overlay = this.add.graphics().setDepth(DEPTH.OVERLAY);
-    overlay.fillStyle(0x000000, 0.7);
+    overlay.fillStyle(0x0f0f23, 1);
     overlay.fillRect(0, 0, GAME_WIDTH, GAME_HEIGHT);
 
-    const pw = 400;
-    const ph = 350;
-    const px = (GAME_WIDTH - pw) / 2;
-    const py = (GAME_HEIGHT - ph) / 2;
+    const titleText = this.add.text(GAME_WIDTH / 2, 60, 'Accounts', {
+      fontSize: '28px', color: '#ffffff', fontFamily: 'Arial', fontStyle: 'bold',
+    }).setOrigin(0.5).setDepth(DEPTH.OVERLAY + 10);
 
-    const panel = this.add.graphics().setDepth(DEPTH.OVERLAY);
-    panel.fillStyle(COLORS.tabletBg, 0.95);
-    panel.fillRoundedRect(px, py, pw, ph, 15);
-    panel.lineStyle(2, COLORS.tabletBorder, 1);
-    panel.strokeRoundedRect(px, py, pw, ph, 15);
-
-    const titleText = this.add.text(GAME_WIDTH / 2, py + 25, 'Accounts', {
-      fontSize: '22px', color: '#ffffff', fontFamily: 'Arial', fontStyle: 'bold',
-    }).setOrigin(0.5).setDepth(DEPTH.OVERLAY);
-
-    const accountsContainer = this.add.container(0, 0);
-    let yOff = py + 60;
-
-    this.users.forEach((user, idx) => {
+    let yOff = 120;
+    this.users.forEach((user) => {
       const isActive = this.currentUser && this.currentUser.id === user.id;
       const bgColor = user.type === AUTH_TYPES.DISCORD ? COLORS.buttonDiscord : COLORS.buttonGray;
-      const btn = new RecolorableButton(this, px + 20, yOff, pw - 80, 40, user.username, isActive ? COLORS.buttonGreenOutline : bgColor, () => {
+      const btn = new RecolorableButton(this, GAME_WIDTH / 2 - 140, yOff, 250, 40, user.username, isActive ? COLORS.buttonGreenOutline : bgColor, () => {
         this.switchUser(user);
-        this.cleanupOverlay([overlay, panel, titleText, accountsContainer]);
+        this.cleanupOverlay([overlay, titleText]);
       });
       if (isActive) {
         btn.setOutlineOnly(true);
       }
 
-      const delBtn = new RecolorableButton(this, px + pw - 55, yOff + 2, 32, 36, 'X', COLORS.danger, () => {
-        this.cleanupOverlay([overlay, panel, titleText, accountsContainer]);
+      const delBtn = new RecolorableButton(this, GAME_WIDTH / 2 + 120, yOff, 32, 36, 'X', COLORS.danger, () => {
+        this.cleanupOverlay([overlay, titleText]);
         this.confirmDeleteAccount(user);
       });
       yOff += 50;
     });
 
-    const addBtn = new RecolorableButton(this, px + 20, py + ph - 95, pw - 40, 35, 'Add Account', COLORS.buttonGray, () => {
-      this.cleanupOverlay([overlay, panel, titleText, accountsContainer]);
+    const addBtn = new RecolorableButton(this, GAME_WIDTH / 2 - 140, yOff + 20, 280, 45, 'Add Account', COLORS.buttonGray, () => {
+      this.cleanupOverlay([overlay, titleText]);
       this.scene.start('AuthScene', { returnScene: 'MenuScene' });
     });
 
-    const signOutBtn = new RecolorableButton(this, px + 20, py + ph - 50, pw - 40, 35, 'Sign Out', COLORS.danger, () => {
-      this.cleanupOverlay([overlay, panel, titleText, accountsContainer]);
+    const signOutBtn = new RecolorableButton(this, GAME_WIDTH / 2 - 140, yOff + 80, 280, 45, 'Sign Out', COLORS.danger, () => {
+      this.cleanupOverlay([overlay, titleText]);
       this.signOut();
     });
 
-    const closeBtn = new RecolorableButton(this, px + pw - 50, py + 10, 35, 35, 'X', COLORS.danger, () => {
-      this.cleanupOverlay([overlay, panel, titleText, accountsContainer, addBtn, signOutBtn, closeBtn]);
+    const backBtn = new RecolorableButton(this, GAME_WIDTH / 2 - 140, yOff + 140, 280, 45, 'Back', COLORS.buttonGray, () => {
+      this.cleanupOverlay([overlay, titleText]);
     });
   }
 
   async confirmDeleteAccount(user) {
-    const overlay = this.add.graphics().setDepth(DEPTH.OVERLAY + 10);
-    overlay.fillStyle(0x000000, 0.8);
+    const overlay = this.add.graphics().setDepth(DEPTH.OVERLAY);
+    overlay.fillStyle(0x0f0f23, 1);
     overlay.fillRect(0, 0, GAME_WIDTH, GAME_HEIGHT);
 
-    const pw = 320;
-    const ph = 180;
-    const px = (GAME_WIDTH - pw) / 2;
-    const py = (GAME_HEIGHT - ph) / 2;
+    const msg = this.add.text(GAME_WIDTH / 2, 140, `Delete "${user.username}"?\nThis cannot be undone.`, {
+      fontSize: '22px', color: '#ffffff', fontFamily: 'Arial', align: 'center',
+    }).setOrigin(0.5, 0.5).setDepth(DEPTH.OVERLAY + 10);
 
-    const panel = this.add.graphics().setDepth(DEPTH.OVERLAY + 10);
-    panel.fillStyle(COLORS.tabletBg, 0.95);
-    panel.fillRoundedRect(px, py, pw, ph, 15);
-    panel.lineStyle(2, COLORS.tabletBorder, 1);
-    panel.strokeRoundedRect(px, py, pw, ph, 15);
-
-    const msg = this.add.text(GAME_WIDTH / 2, py + 40, `Delete "${user.username}"?\nThis cannot be undone.`, {
-      fontSize: '16px', color: '#ffffff', fontFamily: 'Arial', align: 'center',
-    }).setOrigin(0.5, 0.5).setDepth(DEPTH.OVERLAY + 20);
-
-    const yesBtn = new RecolorableButton(this, px + 30, py + 110, 120, 40, 'Delete', COLORS.danger, async () => {
-      this.cleanupOverlay([overlay, panel, msg, yesBtn, noBtn]);
+    const yesBtn = new RecolorableButton(this, GAME_WIDTH / 2 - 140, 240, 120, 45, 'Delete', COLORS.danger, async () => {
+      this.cleanupOverlay([overlay, msg, yesBtn, noBtn]);
       await this.deleteAccount(user);
     });
 
-    const noBtn = new RecolorableButton(this, px + pw - 150, py + 110, 120, 40, 'Cancel', COLORS.buttonGray, () => {
-      this.cleanupOverlay([overlay, panel, msg, yesBtn, noBtn]);
+    const noBtn = new RecolorableButton(this, GAME_WIDTH / 2 + 20, 240, 120, 45, 'Cancel', COLORS.buttonGray, () => {
+      this.cleanupOverlay([overlay, msg, yesBtn, noBtn]);
       this.openProfileMenu();
     });
   }
@@ -276,40 +251,29 @@ export class MenuScene extends Phaser.Scene {
   }
 
   openMultiplayerMenu() {
-    const overlay = this.add.graphics().setDepth(DEPTH.OVERLAY + 10);
-    overlay.fillStyle(0x000000, 0.8);
+    const overlay = this.add.graphics().setDepth(DEPTH.OVERLAY);
+    overlay.fillStyle(0x0f0f23, 1);
     overlay.fillRect(0, 0, GAME_WIDTH, GAME_HEIGHT);
 
-    const pw = 350;
-    const ph = 300;
-    const px = (GAME_WIDTH - pw) / 2;
-    const py = (GAME_HEIGHT - ph) / 2;
+    const titleText = this.add.text(GAME_WIDTH / 2, 60, 'Multiplayer', {
+      fontSize: '28px', color: '#ffffff', fontFamily: 'Arial', fontStyle: 'bold',
+    }).setOrigin(0.5).setDepth(DEPTH.OVERLAY + 10);
 
-    const panel = this.add.graphics().setDepth(DEPTH.OVERLAY + 10);
-    panel.fillStyle(COLORS.tabletBg, 0.95);
-    panel.fillRoundedRect(px, py, pw, ph, 15);
-    panel.lineStyle(2, COLORS.tabletBorder, 1);
-    panel.strokeRoundedRect(px, py, pw, ph, 15);
-
-    const titleText = this.add.text(GAME_WIDTH / 2, py + 25, 'Multiplayer', {
-      fontSize: '22px', color: '#ffffff', fontFamily: 'Arial', fontStyle: 'bold',
-    }).setOrigin(0.5).setDepth(DEPTH.OVERLAY + 20);
-
-    const quickBtn = new RecolorableButton(this, px + 20, py + 70, pw - 40, 45, 'Quick Play', COLORS.buttonGreen, () => {
-      this.cleanupOverlay([overlay, panel, titleText, quickBtn, joinBtn, serversBtn, closeBtn]);
+    const quickBtn = new RecolorableButton(this, GAME_WIDTH / 2 - 120, 140, 240, 50, 'Quick Play', COLORS.buttonGreen, () => {
+      this.cleanupOverlay([overlay, titleText, quickBtn, joinBtn, serversBtn, backBtn]);
       this.scene.start('LoadingScene', { mode: 'multiplayer', user: this.currentUser });
     });
 
-    const joinBtn = new RecolorableButton(this, px + 20, py + 130, pw - 40, 45, 'Join Server', COLORS.buttonGray, () => {
+    const joinBtn = new RecolorableButton(this, GAME_WIDTH / 2 - 120, 210, 240, 50, 'Join Server', COLORS.buttonGray, () => {
       this.showMessage('Enter a server ID to join');
     });
 
-    const serversBtn = new RecolorableButton(this, px + 20, py + 190, pw - 40, 45, 'My Servers', COLORS.buttonGray, () => {
+    const serversBtn = new RecolorableButton(this, GAME_WIDTH / 2 - 120, 280, 240, 50, 'My Servers', COLORS.buttonGray, () => {
       this.showMessage('Create and manage your servers');
     });
 
-    const closeBtn = new RecolorableButton(this, px + pw - 50, py + 10, 35, 35, 'X', COLORS.danger, () => {
-      this.cleanupOverlay([overlay, panel, titleText, quickBtn, joinBtn, serversBtn, closeBtn]);
+    const backBtn = new RecolorableButton(this, GAME_WIDTH / 2 - 120, 380, 240, 50, 'Back', COLORS.danger, () => {
+      this.cleanupOverlay([overlay, titleText, quickBtn, joinBtn, serversBtn, backBtn]);
     });
   }
 
@@ -320,24 +284,13 @@ export class MenuScene extends Phaser.Scene {
       return;
     }
 
-    const overlay = this.add.graphics().setDepth(DEPTH.OVERLAY + 10);
-    overlay.fillStyle(0x000000, 0.8);
+    const overlay = this.add.graphics().setDepth(DEPTH.OVERLAY);
+    overlay.fillStyle(0x0f0f23, 1);
     overlay.fillRect(0, 0, GAME_WIDTH, GAME_HEIGHT);
 
-    const pw = 400;
-    const ph = 360;
-    const px = (GAME_WIDTH - pw) / 2;
-    const py = (GAME_HEIGHT - ph) / 2;
-
-    const panel = this.add.graphics().setDepth(DEPTH.OVERLAY + 10);
-    panel.fillStyle(COLORS.tabletBg, 0.95);
-    panel.fillRoundedRect(px, py, pw, ph, 15);
-    panel.lineStyle(2, COLORS.tabletBorder, 1);
-    panel.strokeRoundedRect(px, py, pw, ph, 15);
-
-    const titleText = this.add.text(GAME_WIDTH / 2, py + 25, 'Mobile App Sign-In Code', {
-      fontSize: '18px', color: '#ffffff', fontFamily: 'Arial', fontStyle: 'bold',
-    }).setOrigin(0.5).setDepth(DEPTH.OVERLAY + 20);
+    const titleText = this.add.text(GAME_WIDTH / 2, 60, 'Mobile App Sign-In Code', {
+      fontSize: '24px', color: '#ffffff', fontFamily: 'Arial', fontStyle: 'bold',
+    }).setOrigin(0.5).setDepth(DEPTH.OVERLAY + 10);
 
     const code = String(Math.floor(100000 + Math.random() * 900000));
 
@@ -346,37 +299,37 @@ export class MenuScene extends Phaser.Scene {
       .insert({ code, user_id: user.id });
 
     if (insertError) {
-      const errText = this.add.text(GAME_WIDTH / 2, py + 120, 'Server error - try again', {
-        fontSize: '18px', color: '#ff4444', fontFamily: 'Arial',
-      }).setOrigin(0.5).setDepth(DEPTH.OVERLAY + 20);
+      const errText = this.add.text(GAME_WIDTH / 2, 170, 'Server error - try again', {
+        fontSize: '20px', color: '#ff4444', fontFamily: 'Arial',
+      }).setOrigin(0.5).setDepth(DEPTH.OVERLAY + 10);
 
-      const retryBtn = new RecolorableButton(this, GAME_WIDTH / 2 - 60, py + 180, 120, 35, 'Retry', COLORS.buttonGray, () => {
-        this.cleanupOverlay([overlay, panel, titleText, errText, retryBtn, closeBtn]);
+      const retryBtn = new RecolorableButton(this, GAME_WIDTH / 2 - 80, 230, 160, 45, 'Retry', COLORS.buttonGray, () => {
+        this.cleanupOverlay([overlay, titleText, errText, retryBtn, backBtn]);
         this.openQRCodeModal();
       });
 
-      const closeBtn = new RecolorableButton(this, px + pw - 50, py + 10, 35, 35, 'X', COLORS.danger, () => {
-        this.cleanupOverlay([overlay, panel, titleText, errText, retryBtn, closeBtn]);
+      const backBtn = new RecolorableButton(this, GAME_WIDTH / 2 - 80, 290, 160, 45, 'Back', COLORS.danger, () => {
+        this.cleanupOverlay([overlay, titleText, errText, retryBtn, backBtn]);
       });
       return;
     }
 
-    const codeText = this.add.text(GAME_WIDTH / 2, py + 110, code, {
-      fontSize: '64px', color: '#4ecca3', fontFamily: 'Courier New', fontStyle: 'bold',
-      letterSpacing: 12,
-    }).setOrigin(0.5).setDepth(DEPTH.OVERLAY + 20);
+    const codeText = this.add.text(GAME_WIDTH / 2, 160, code, {
+      fontSize: '72px', color: '#4ecca3', fontFamily: 'Courier New', fontStyle: 'bold',
+      letterSpacing: 16,
+    }).setOrigin(0.5).setDepth(DEPTH.OVERLAY + 10);
 
-    const hint = this.add.text(GAME_WIDTH / 2, py + 180, 'Open G&G Mobile on your iPhone\nand enter this code', {
-      fontSize: '14px', color: '#aaaaaa', fontFamily: 'Arial',
+    const hint = this.add.text(GAME_WIDTH / 2, 240, 'Open G&G Mobile on your iPhone\nand enter this code', {
+      fontSize: '16px', color: '#aaaaaa', fontFamily: 'Arial',
       align: 'center',
-    }).setOrigin(0.5).setDepth(DEPTH.OVERLAY + 20);
+    }).setOrigin(0.5).setDepth(DEPTH.OVERLAY + 10);
 
-    const expireText = this.add.text(GAME_WIDTH / 2, py + 250, 'Expires in 5 minutes', {
-      fontSize: '12px', color: '#888888', fontFamily: 'Arial',
-    }).setOrigin(0.5).setDepth(DEPTH.OVERLAY + 20);
+    const expireText = this.add.text(GAME_WIDTH / 2, 310, 'Expires in 5 minutes', {
+      fontSize: '14px', color: '#888888', fontFamily: 'Arial',
+    }).setOrigin(0.5).setDepth(DEPTH.OVERLAY + 10);
 
-    const closeBtn = new RecolorableButton(this, px + pw - 50, py + 10, 35, 35, 'X', COLORS.danger, () => {
-      this.cleanupOverlay([overlay, panel, titleText, codeText, hint, expireText, closeBtn]);
+    const backBtn = new RecolorableButton(this, GAME_WIDTH / 2 - 60, 370, 120, 40, 'Close', COLORS.danger, () => {
+      this.cleanupOverlay([overlay, titleText, codeText, hint, expireText, backBtn]);
     });
   }
 
@@ -495,34 +448,22 @@ export class MenuScene extends Phaser.Scene {
   }
 
   openSettingsMenu() {
-    const bounds = this.tabletBounds;
-    const pw = 400;
-    const ph = 280;
-    const px = (GAME_WIDTH - pw) / 2;
-    const py = (GAME_HEIGHT - ph) / 2;
-
     const overlay = this.add.graphics().setDepth(DEPTH.OVERLAY);
-    overlay.fillStyle(0x000000, 0.7);
+    overlay.fillStyle(0x0f0f23, 1);
     overlay.fillRect(0, 0, GAME_WIDTH, GAME_HEIGHT);
 
-    const panel = this.add.graphics().setDepth(DEPTH.OVERLAY);
-    panel.fillStyle(COLORS.tabletBg, 0.95);
-    panel.fillRoundedRect(px, py, pw, ph, 15);
-    panel.lineStyle(2, COLORS.tabletBorder, 1);
-    panel.strokeRoundedRect(px, py, pw, ph, 15);
+    const titleText = this.add.text(GAME_WIDTH / 2, 60, 'Settings', {
+      fontSize: '28px', color: '#ffffff', fontFamily: 'Arial', fontStyle: 'bold',
+    }).setOrigin(0.5).setDepth(DEPTH.OVERLAY + 10);
 
-    const titleText = this.add.text(GAME_WIDTH / 2, py + 25, 'Settings', {
-      fontSize: '22px', color: '#ffffff', fontFamily: 'Arial', fontStyle: 'bold',
-    }).setOrigin(0.5).setDepth(DEPTH.OVERLAY);
-
-    const cloudLabel = this.add.text(px + 20, py + 70, 'Cloud Save Sync', {
-      fontSize: '16px', color: '#ffffff', fontFamily: 'Arial',
-    }).setDepth(DEPTH.OVERLAY);
+    const cloudLabel = this.add.text(GAME_WIDTH / 2 - 120, 140, 'Cloud Save Sync', {
+      fontSize: '18px', color: '#ffffff', fontFamily: 'Arial',
+    }).setDepth(DEPTH.OVERLAY + 10);
 
     const savedSettings = this.saveSystem.getSettings();
     const initialCloudState = savedSettings.cloudSyncEnabled !== false;
 
-    this.cloudSyncToggle = new RecolorableButton(this, px + pw - 80, py + 62, 60, 30, '', COLORS.buttonGray, () => {
+    this.cloudSyncToggle = new RecolorableButton(this, GAME_WIDTH / 2 + 50, 130, 70, 35, '', COLORS.buttonGray, () => {
       this.cloudSyncToggle.isOn = !this.cloudSyncToggle.isOn;
       this.saveSystem.setSetting('cloudSyncEnabled', this.cloudSyncToggle.isOn);
       this.cloudSyncToggle.setColor(this.cloudSyncToggle.isOn ? COLORS.buttonGreen : COLORS.buttonGray);
@@ -532,12 +473,12 @@ export class MenuScene extends Phaser.Scene {
     this.cloudSyncToggle.setColor(initialCloudState ? COLORS.buttonGreen : COLORS.buttonGray);
     this.cloudSyncToggle.setText(initialCloudState ? 'ON' : 'OFF');
 
-    const conflictInfo = this.add.text(px + 20, py + 110, 'Check for save conflicts between\nlocal and cloud when starting the game.', {
-      fontSize: '12px', color: '#888888', fontFamily: 'Arial',
-    }).setDepth(DEPTH.OVERLAY);
+    const conflictInfo = this.add.text(GAME_WIDTH / 2, 190, 'Check for save conflicts between local and cloud\nwhen starting the game.', {
+      fontSize: '13px', color: '#888888', fontFamily: 'Arial', align: 'center',
+    }).setOrigin(0.5).setDepth(DEPTH.OVERLAY + 10);
 
-    const closeBtn = new RecolorableButton(this, px + pw - 50, py + 10, 35, 35, 'X', COLORS.danger, () => {
-      this.cleanupOverlay([overlay, panel, titleText, cloudLabel, conflictInfo, closeBtn, this.cloudSyncToggle]);
+    const backBtn = new RecolorableButton(this, GAME_WIDTH / 2 - 80, 270, 160, 45, 'Back', COLORS.danger, () => {
+      this.cleanupOverlay([overlay, titleText, cloudLabel, conflictInfo, backBtn, this.cloudSyncToggle]);
     });
   }
 
