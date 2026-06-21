@@ -19,30 +19,26 @@ export class InAppBrowser {
   async startExternalFlow(supabase) {
     window.electronAPI.minimizeWindow();
 
-    const result = await window.electronAPI.startAuthServer();
-    if (!result || !result.callbackUrl) {
-      window.electronAPI.restoreWindow();
-      return { success: false, error: 'Could not start auth server' };
-    }
+    const redirectTo = 'https://kingyorkson.github.io/GaG-Web/auth/callback.html';
 
     const { data, error } = await supabase.auth.signInWithOAuth({
       provider: 'discord',
       options: {
-        redirectTo: result.callbackUrl,
+        redirectTo,
         skipBrowserRedirect: true,
       },
     });
     if (error || !data?.url) {
-      window.electronAPI.closeAuthUrl();
       window.electronAPI.restoreWindow();
       return { success: false, error: error?.message || 'Failed to get Discord auth URL' };
     }
 
-    window.electronAPI.openExternalUrl(data.url);
-
-    const hash = await window.electronAPI.waitForAuthHash();
+    const hash = await window.electronAPI.openAuthWindow(data.url);
     window.electronAPI.restoreWindow();
-    return { success: true, hash };
+    if (hash) {
+      return { success: true, hash };
+    }
+    return { success: false, error: 'Authentication was cancelled or failed' };
   }
 
   openTab(url, existingPopup) {
@@ -87,8 +83,5 @@ export class InAppBrowser {
   }
 
   close() {
-    if (this.isElectron && window.electronAPI.closeAuthUrl) {
-      window.electronAPI.closeAuthUrl();
-    }
   }
 }

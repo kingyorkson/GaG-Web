@@ -1,12 +1,7 @@
-const { app, BrowserWindow, ipcMain, screen, shell } = require('electron');
+const { app, BrowserWindow, ipcMain, screen } = require('electron');
 const path = require('path');
-const http = require('http');
-const net = require('net');
 
 let mainWindow;
-let authServer = null;
-let authResolve = null;
-let authTimer = null;
 
 function createWindow() {
   const { width, height } = screen.getPrimaryDisplay().workAreaSize;
@@ -45,111 +40,69 @@ function createWindow() {
       event.preventDefault();
     }
   });
-
-  setupAuthHandlers();
 }
 
-const CALLBACK_HTML = `<!DOCTYPE html><html><body><script>
-var h=window.location.hash.substring(1);
-fetch('/auth/done?'+h).then(function(){window.close()});
-<\/script></body></html>`;
+ipcMain.handle('open-auth-window', async (event, authUrl) => {
+  return new Promise((resolve) => {
+    let resolved = false;
+    let authWin = null;
 
-function getRandomPort() {
-  return new Promise((resolve, reject) => {
-    const server = net.createServer();
-    server.listen(0, '127.0.0.1', () => {
-      const port = server.address().port;
-      server.close(() => resolve(port));
-    });
-    server.on('error', reject);
-  });
-}
-
-function setupAuthHandlers() {
-  ipcMain.handle('start-auth-server', async () => {
-    stopAuthServer();
-    const port = await getRandomPort();
-    const callbackUrl = `http://127.0.0.1:${port}/auth/callback.html`;
-
-    return new Promise((resolve) => {
-      authResolve = null;
-      authTimer = setTimeout(() => {
-        stopAuthServer();
-        resolve({ callbackUrl: '', error: 'timeout' });
-      }, 120000);
-
-      authServer = http.createServer((req, res) => {
-        if (req.url.startsWith('/auth/callback.html')) {
-          res.writeHead(200, { 'Content-Type': 'text/html' });
-          res.end(CALLBACK_HTML);
-        } else if (req.url.startsWith('/auth/done?')) {
-          const hash = '#' + req.url.substring('/auth/done?'.length);
-          res.writeHead(200, { 'Content-Type': 'text/plain' });
-          res.end('ok');
-          stopAuthServer();
-          if (authResolve) authResolve(hash);
-        } else {
-          res.writeHead(404);
-          res.end();
-        }
-      });
-
-      authServer.listen(port, '127.0.0.1', () => {
-        resolve({ callbackUrl });
-      });
-    });
-  });
-
-  ipcMain.handle('wait-for-auth-hash', async () => {
-    clearTimeout(authTimer);
-    return new Promise((resolve) => {
-      authResolve = resolve;
-      authTimer = setTimeout(() => {
-        stopAuthServer();
-        resolve('');
-      }, 120000);
-    });
-  });
-
-  ipcMain.handle('open-external-url', async (event, url) => {
-    shell.openExternal(url);
-  });
-
-  ipcMain.on('close-auth-server', () => {
-    if (authResolve) {
-      clearTimeout(authTimer);
-      authResolve('');
-      authResolve = null;
-    }
-    stopAuthServer();
-  });
-
-  ipcMain.on('minimize-window', () => {
-    if (mainWindow) {
-      mainWindow.minimize();
-    }
-  });
-
-  ipcMain.on('restore-window', () => {
-    if (mainWindow) {
-      if (mainWindow.isMinimized()) {
-        mainWindow.restore();
+    const finish = (hash) => {
+      if (resolved) return;
+      resolved = true;
+      if (authWin && !authWin.isDestroyed()) {
+        authWin.close();
       }
-      mainWindow.focus();
-    }
-  });
-}
+      resolve(hash || '');
+    };
 
-function stopAuthServer() {
-  if (authServer) {
-    authServer.close();
-    authServer = null;
+    authWin = new BrowserWindow({
+      width: 800,
+      height: 700,
+      show: true,
+      webPreferences: {
+        nodeIntegration: false,
+        contextIsolation: true,
+      },
+    });
+
+    authWin.loadURL(authUrl);
+
+    const checkUrl = (url) => {
+      if (url && url.includes('access_token=')) {
+        const hashIdx = url.indexOf('#');
+        if (hashIdx >= 0) {
+          finish(url.substring(hashIdx));
+        }
+      }
+    };
+
+    authWin.webContents.on('will-redirect', (e, url) => checkUrl(url));
+    authWin.webContents.on('did-navigate', (e, url) => checkUrl(url));
+    authWin.webContents.on('did-navigate-in-page', (e, url) => checkUrl(url));
+
+    authWin.on('closed', () => {
+      finish('');
+    });
+
+    setTimeout(() => finish(''), 300000);
+  });
+});
+
+ipcMain.on('minimize-window', () => {
+  if (mainWindow) {
+    mainWindow.minimize();
   }
-  if (authTimer) {
-    clearTimeout(authTimer);
-    authTimer = null;
+});
+
+ipcMain.on('restore-window', () => {
+  if (mainWindow) {
+    if (mainWindow.isMinimized()) {
+      mainWindow.restore();
+    }
+    mainWindow.focus();
   }
-}
+});
 
 app.whenReady().then(createWindow);
 
