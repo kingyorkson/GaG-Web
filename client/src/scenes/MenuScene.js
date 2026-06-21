@@ -101,6 +101,13 @@ export class MenuScene extends Phaser.Scene {
     this.userBtn = null;
     this.profileBtn = null;
 
+    this.addonsBtn = null;
+    if (typeof window.electronAPI !== 'undefined') {
+      this.addonsBtn = new RecolorableButton(this, GAME_WIDTH - 320, GAME_HEIGHT - 50, 140, 35, 'Add-Ons', COLORS.buttonGray, () => {
+        this.openAddonsMenu();
+      });
+    }
+
     this.mobileQRBtn = new RecolorableButton(this, GAME_WIDTH - 160, GAME_HEIGHT - 50, 140, 35, 'Mobile Code', COLORS.buttonGray, () => {
       this.openQRCodeModal();
     });
@@ -477,6 +484,85 @@ export class MenuScene extends Phaser.Scene {
     const backBtn = new RecolorableButton(this, GAME_WIDTH / 2 - 80, 270, 160, 45, 'Back', COLORS.danger, () => {
       this.cleanupOverlay([overlay, titleText, cloudLabel, conflictInfo, backBtn, this.cloudSyncToggle]);
     });
+  }
+
+  async openAddonsMenu() {
+    const overlay = this.add.graphics().setDepth(DEPTH.OVERLAY);
+    overlay.fillStyle(0x0f0f23, 1);
+    overlay.fillRect(0, 0, GAME_WIDTH, GAME_HEIGHT);
+
+    const titleText = this.add.text(GAME_WIDTH / 2, 40, 'Add-Ons', {
+      fontSize: '28px', color: '#ffffff', fontFamily: 'Arial', fontStyle: 'bold',
+    }).setOrigin(0.5).setDepth(DEPTH.OVERLAY + 10);
+
+    const elements = [overlay, titleText];
+
+    let addons = [];
+    let yOff = 100;
+
+    try {
+      if (window.electronAPI?.listAddons) {
+        addons = await window.electronAPI.listAddons();
+      }
+    } catch (e) {
+    }
+
+    if (addons.length === 0) {
+      this.add.text(GAME_WIDTH / 2, yOff, 'No add-ons installed.', {
+        fontSize: '18px', color: '#888888', fontFamily: 'Arial',
+      }).setOrigin(0.5).setDepth(DEPTH.OVERLAY + 10);
+      yOff += 40;
+      this.add.text(GAME_WIDTH / 2, yOff, 'Place .gagaon files in the addons folder:', {
+        fontSize: '13px', color: '#555555', fontFamily: 'Arial',
+      }).setOrigin(0.5).setDepth(DEPTH.OVERLAY + 10);
+      yOff += 20;
+      this.add.text(GAME_WIDTH / 2, yOff, 'Or click Browse to install one.', {
+        fontSize: '13px', color: '#555555', fontFamily: 'Arial',
+      }).setOrigin(0.5).setDepth(DEPTH.OVERLAY + 10);
+      yOff += 30;
+      const browseBtn = new RecolorableButton(this, GAME_WIDTH / 2 - 80, yOff, 160, 40, 'Browse', COLORS.buttonGray, async () => {
+        if (window.electronAPI?.pickAddonFile) {
+          const filePath = await window.electronAPI.pickAddonFile();
+          if (filePath) {
+            const result = await window.electronAPI.installAddon(filePath);
+            if (result.success) {
+              this.cleanupOverlay(elements);
+              this.openAddonsMenu();
+            }
+          }
+        }
+      });
+      elements.push(browseBtn);
+    } else {
+      this.add.text(GAME_WIDTH / 2 - 150, yOff, 'Installed Add-Ons:', {
+        fontSize: '16px', color: '#4ecca3', fontFamily: 'Arial', fontStyle: 'bold',
+      }).setDepth(DEPTH.OVERLAY + 10);
+      yOff += 30;
+
+      addons.forEach((addon, i) => {
+        const ay = yOff + i * 50;
+        const color = addon.error ? '#ff4444' : '#ffffff';
+        this.add.text(GAME_WIDTH / 2 - 150, ay, addon.name || addon.file, {
+          fontSize: '16px', color, fontFamily: 'Arial',
+        }).setDepth(DEPTH.OVERLAY + 10);
+
+        if (!addon.error) {
+          const removeBtn = new RecolorableButton(this, GAME_WIDTH / 2 + 100, ay - 8, 80, 30, 'Remove', COLORS.danger, async () => {
+            await window.electronAPI.removeAddon(addon.file);
+            this.cleanupOverlay(elements);
+            this.openAddonsMenu();
+          });
+          elements.push(removeBtn);
+        }
+      });
+
+      yOff += addons.length * 50 + 20;
+    }
+
+    const backBtn = new RecolorableButton(this, GAME_WIDTH / 2 - 80, GAME_HEIGHT - 65, 160, 45, 'Back', COLORS.danger, () => {
+      this.cleanupOverlay(elements);
+    });
+    elements.push(backBtn);
   }
 
   async openFriendsMenu() {

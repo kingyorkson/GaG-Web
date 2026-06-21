@@ -1,0 +1,6 @@
+{
+  "name": "Admin Panel",
+  "version": "1.0.0",
+  "description": "In-game admin panel with cash and player management. Press F7 to open.",
+  "icon": "data/textures/icon.png"
+}

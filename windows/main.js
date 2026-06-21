@@ -1,7 +1,14 @@
 const { app, BrowserWindow, ipcMain, screen } = require('electron');
 const path = require('path');
+const fs = require('fs');
+const AdmZip = require('adm-zip');
 
 let mainWindow;
+
+const ADDONS_DIR = path.join(app.getPath('userData'), 'addons');
+if (!fs.existsSync(ADDONS_DIR)) {
+  fs.mkdirSync(ADDONS_DIR, { recursive: true });
+}
 
 function createWindow() {
   const { width, height } = screen.getPrimaryDisplay().workAreaSize;
@@ -41,6 +48,79 @@ function createWindow() {
     }
   });
 }
+
+// --- Add-on system IPC ---
+
+ipcMain.handle('list-addons', () => {
+  try {
+    if (!fs.existsSync(ADDONS_DIR)) return [];
+    const files = fs.readdirSync(ADDONS_DIR).filter(f => f.endsWith('.gagaon'));
+    return files.map(f => {
+      const p = path.join(ADDONS_DIR, f);
+      try {
+        const zip = new AdmZip(p);
+        const entry = zip.getEntry('package.json');
+        if (!entry) return { file: f, error: 'Missing package.json' };
+        const pkg = JSON.parse(entry.getData().toString('utf8'));
+        return { file: f, name: pkg.name, icon: pkg.icon, description: pkg.description, version: pkg.version, enabled: true };
+      } catch (e) {
+        return { file: f, error: e.message };
+      }
+    });
+  } catch (e) {
+    return [];
+  }
+});
+
+ipcMain.handle('install-addon', async (event, filePath) => {
+  try {
+    if (!filePath.endsWith('.gagaon')) return { success: false, error: 'Not a .gagaon file' };
+    const dest = path.join(ADDONS_DIR, path.basename(filePath));
+    fs.copyFileSync(filePath, dest);
+    return { success: true };
+  } catch (e) {
+    return { success: false, error: e.message };
+  }
+});
+
+ipcMain.handle('remove-addon', async (event, fileName) => {
+  try {
+    const p = path.join(ADDONS_DIR, fileName);
+    if (fs.existsSync(p)) fs.unlinkSync(p);
+    return { success: true };
+  } catch (e) {
+    return { success: false, error: e.message };
+  }
+});
+
+ipcMain.handle('get-addon-icon', async (event, fileName) => {
+  try {
+    const p = path.join(ADDONS_DIR, fileName);
+    const zip = new AdmZip(p);
+    const pkgEntry = zip.getEntry('package.json');
+    if (!pkgEntry) return null;
+    const pkg = JSON.parse(pkgEntry.getData().toString('utf8'));
+    if (!pkg.icon) return null;
+    const iconEntry = zip.getEntry(pkg.icon);
+    if (!iconEntry) return null;
+    const data = iconEntry.getData();
+    return 'data:image/png;base64,' + data.toString('base64');
+  } catch (e) {
+    return null;
+  }
+});
+
+ipcMain.handle('pick-addon-file', async () => {
+  const { dialog } = require('electron');
+  const result = await dialog.showOpenDialog(mainWindow, {
+    filters: [{ name: 'Game Add-ons', extensions: ['gagaon'] }],
+    properties: ['openFile'],
+  });
+  if (result.canceled || result.filePaths.length === 0) return null;
+  return result.filePaths[0];
+});
+
+// --- Auth IPC (BrowserWindow-based Discord OAuth) ---
 
 ipcMain.handle('open-auth-window', async (event, authUrl) => {
   return new Promise((resolve) => {

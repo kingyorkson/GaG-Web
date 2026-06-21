@@ -43,6 +43,8 @@ export class GardenScene extends Phaser.Scene {
     this.inventoryOpen = false;
     this.currentTool = null;
     this.cash = 100;
+    this.adminPanelOpen = false;
+    this.adminPromptOpen = false;
 
     if (this.savedGardens) {
       this.gardens = this.savedGardens;
@@ -443,6 +445,170 @@ export class GardenScene extends Phaser.Scene {
         this.closeTablet();
       }
     });
+
+    this.input.keyboard.on('keydown-F7', (event) => {
+      event.preventDefault();
+      this.toggleAdminPanel();
+    });
+  }
+
+  toggleAdminPanel() {
+    if (this.adminPanelOpen) {
+      this.closeAdminPanel();
+    } else {
+      this.openAdminPanel();
+    }
+  }
+
+  openAdminPanel() {
+    this.adminPanelOpen = true;
+    this.adminPanelElements = [];
+
+    const px = 10;
+    const py = 10;
+    const pw = 220;
+
+    const bg = this.add.graphics().setDepth(DEPTH.POPUP);
+    bg.fillStyle(0x1a1a2e, 0.95);
+    bg.fillRoundedRect(px, py, pw, 340, 8);
+    bg.lineStyle(2, 0x4ecca3, 1);
+    bg.strokeRoundedRect(px, py, pw, 340, 8);
+    this.adminPanelElements.push(bg);
+
+    const title = this.add.text(px + 10, py + 12, 'Admin Panel', {
+      fontSize: '16px', color: '#4ecca3', fontFamily: 'Arial', fontStyle: 'bold',
+    }).setDepth(DEPTH.POPUP + 1);
+    this.adminPanelElements.push(title);
+
+    const closeBtn = new RecolorableButton(this, px + pw - 30, py + 8, 22, 22, 'X', COLORS.danger, () => {
+      this.closeAdminPanel();
+    });
+    this.adminPanelElements.push(closeBtn);
+
+    const addCashBtn = new RecolorableButton(this, px + 10, py + 50, pw - 20, 35, 'Add Cash', COLORS.buttonGreen, () => {
+      this.adminPromptCash();
+    });
+    this.adminPanelElements.push(addCashBtn);
+
+    const managePlayersBtn = new RecolorableButton(this, px + 10, py + 95, pw - 20, 35, 'Manage Players', COLORS.buttonGray, () => {
+      this.adminManagePlayers();
+    });
+    this.adminPanelElements.push(managePlayersBtn);
+  }
+
+  closeAdminPanel() {
+    this.adminPanelOpen = false;
+    if (this.adminPanelElements) {
+      this.adminPanelElements.forEach(el => { if (el && el.destroy) el.destroy(); });
+      this.adminPanelElements = [];
+    }
+  }
+
+  adminPromptCash() {
+    if (this.adminPromptOpen) return;
+    this.adminPromptOpen = true;
+
+    const overlay = this.add.graphics().setDepth(DEPTH.POPUP + 10);
+    overlay.fillStyle(0x000000, 0.5);
+    overlay.fillRect(0, 0, GAME_WIDTH, GAME_HEIGHT);
+
+    const px = GAME_WIDTH / 2 - 120;
+    const py = GAME_HEIGHT / 2 - 60;
+    const pw = 240;
+    const ph = 120;
+
+    const panel = this.add.graphics().setDepth(DEPTH.POPUP + 10);
+    panel.fillStyle(0x1a1a2e, 1);
+    panel.fillRoundedRect(px, py, pw, ph, 8);
+    panel.lineStyle(2, 0x4ecca3, 1);
+    panel.strokeRoundedRect(px, py, pw, ph, 8);
+
+    const label = this.add.text(GAME_WIDTH / 2, py + 15, 'Set Cash:', {
+      fontSize: '16px', color: '#ffffff', fontFamily: 'Arial',
+    }).setOrigin(0.5).setDepth(DEPTH.POPUP + 20);
+
+    const inputBg = this.add.graphics().setDepth(DEPTH.POPUP + 20);
+    inputBg.fillStyle(0x2d2d44, 1);
+    inputBg.fillRoundedRect(px + 20, py + 40, pw - 40, 30, 4);
+
+    const inputText = this.add.text(px + 30, py + 55, '', {
+      fontSize: '16px', color: '#ffffff', fontFamily: 'Arial',
+    }).setDepth(DEPTH.POPUP + 20);
+
+    const promptElements = [overlay, panel, label, inputBg, inputText];
+    let inputValue = '';
+    let focused = true;
+
+    const submit = () => {
+      const amount = parseInt(inputValue, 10);
+      if (!isNaN(amount) && amount >= 0) {
+        this.cash = amount;
+        if (this.inventoryUI) this.inventoryUI.updateCash(amount);
+        this.showMessage(`Cash set to $${amount}`);
+      }
+      promptElements.forEach(el => el.destroy());
+      this.input.keyboard.off('keydown', handler);
+      this.adminPromptOpen = false;
+    };
+
+    const handler = (event) => {
+      if (!focused) return;
+      if (event.key === 'Enter') { submit(); return; }
+      if (event.key === 'Backspace') { inputValue = inputValue.slice(0, -1); }
+      else if (event.key.length === 1 && /[0-9]/.test(event.key)) { inputValue += event.key; }
+      inputText.setText(inputValue);
+    };
+
+    this.input.keyboard.on('keydown', handler);
+
+    const okBtn = new RecolorableButton(this, GAME_WIDTH / 2 - 30, py + 80, 60, 28, 'OK', COLORS.buttonGreen, submit);
+    promptElements.push(okBtn);
+  }
+
+  adminManagePlayers() {
+    this.closeAdminPanel();
+    const players = [this.user || { username: 'Player', id: 'local' }];
+    if (this.otherPlayers) {
+      this.otherPlayers.forEach(p => {
+        if (!players.find(x => x.id === p.userId)) {
+          players.push({ username: p.username, id: p.userId });
+        }
+      });
+    }
+
+    const overlay = this.add.graphics().setDepth(DEPTH.POPUP + 10);
+    overlay.fillStyle(0x000000, 0.5);
+    overlay.fillRect(0, 0, GAME_WIDTH, GAME_HEIGHT);
+
+    const px = GAME_WIDTH / 2 - 150;
+    const py = 80;
+    const pw = 300;
+
+    const panel = this.add.graphics().setDepth(DEPTH.POPUP + 10);
+    panel.fillStyle(0x1a1a2e, 1);
+    panel.fillRoundedRect(px, py, pw, 40 + players.length * 45 + 20, 8);
+    panel.lineStyle(2, 0x4ecca3, 1);
+    panel.strokeRoundedRect(px, py, pw, 40 + players.length * 45 + 20, 8);
+
+    const title = this.add.text(GAME_WIDTH / 2, py + 15, 'Players', {
+      fontSize: '18px', color: '#4ecca3', fontFamily: 'Arial', fontStyle: 'bold',
+    }).setOrigin(0.5).setDepth(DEPTH.POPUP + 20);
+
+    const elements = [overlay, panel, title];
+
+    players.forEach((p, i) => {
+      const y = py + 45 + i * 45;
+      const t = this.add.text(px + 15, y, p.username, {
+        fontSize: '15px', color: '#ffffff', fontFamily: 'Arial',
+      }).setDepth(DEPTH.POPUP + 20);
+      elements.push(t);
+    });
+
+    const backBtn = new RecolorableButton(this, GAME_WIDTH / 2 - 50, py + 45 + players.length * 45 + 10, 100, 32, 'Back', COLORS.danger, () => {
+      elements.forEach(el => el.destroy());
+      this.input.keyboard.off('keydown');
+    });
+    elements.push(backBtn);
   }
 
   setupGamepad() {
