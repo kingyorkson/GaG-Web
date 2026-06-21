@@ -479,32 +479,205 @@ export class MenuScene extends Phaser.Scene {
     });
   }
 
-  openFriendsMenu() {
+  async openFriendsMenu() {
     const overlay = this.add.graphics().setDepth(DEPTH.OVERLAY);
     overlay.fillStyle(0x0f0f23, 1);
     overlay.fillRect(0, 0, GAME_WIDTH, GAME_HEIGHT);
 
-    const titleText = this.add.text(GAME_WIDTH / 2, 60, 'Friends', {
+    const titleText = this.add.text(GAME_WIDTH / 2, 40, 'Friends', {
       fontSize: '28px', color: '#ffffff', fontFamily: 'Arial', fontStyle: 'bold',
     }).setOrigin(0.5).setDepth(DEPTH.OVERLAY + 10);
 
-    const friends = this.currentUser?.friends || [];
-    let yOff = 120;
-    if (friends.length === 0) {
-      this.add.text(GAME_WIDTH / 2, yOff, this.currentUser ? 'No friends yet.' : 'Sign in to see your friends.', {
+    const elements = [overlay, titleText];
+    let yOff = 90;
+    let sectionY = yOff;
+
+    if (!this.currentUser) {
+      this.add.text(GAME_WIDTH / 2, sectionY, 'Sign in to use friends.', {
         fontSize: '18px', color: '#888888', fontFamily: 'Arial',
       }).setOrigin(0.5).setDepth(DEPTH.OVERLAY + 10);
     } else {
-      friends.forEach((f, i) => {
-        this.add.text(GAME_WIDTH / 2, yOff + i * 40, f.username || f.name || `Friend ${i + 1}`, {
-          fontSize: '18px', color: '#ffffff', fontFamily: 'Arial',
-        }).setOrigin(0.5).setDepth(DEPTH.OVERLAY + 10);
+      const addBtn = new RecolorableButton(this, GAME_WIDTH - 160, 35, 140, 35, 'Add Friend', COLORS.buttonGreen, () => {
+        this.cleanupOverlay(elements);
+        this.openAddFriend();
       });
+      elements.push(addBtn);
+
+      const [friendList, pendingRequests] = await Promise.all([
+        this.networkSystem.getFriends(),
+        this.networkSystem.getPendingFriendRequests(),
+      ]);
+
+      const friendNames = new Set(friendList.map(f => f.id));
+
+      if (pendingRequests.length > 0) {
+        this.add.text(GAME_WIDTH / 2 - 150, sectionY, 'Pending Requests:', {
+          fontSize: '16px', color: '#ffcc00', fontFamily: 'Arial', fontStyle: 'bold',
+        }).setDepth(DEPTH.OVERLAY + 10);
+        sectionY += 30;
+        pendingRequests.forEach((r, i) => {
+          const y = sectionY + i * 40;
+          this.add.text(GAME_WIDTH / 2 - 150, y, `${r.username} wants to be friends`, {
+            fontSize: '15px', color: '#ffffff', fontFamily: 'Arial',
+          }).setDepth(DEPTH.OVERLAY + 10);
+          const acceptBtn = new RecolorableButton(this, GAME_WIDTH / 2 + 50, y - 8, 80, 30, 'Accept', COLORS.buttonGreen, async () => {
+            await this.networkSystem.acceptFriendRequest(r.id);
+            this.cleanupOverlay(elements);
+            this.openFriendsMenu();
+          });
+          elements.push(acceptBtn);
+          const declineBtn = new RecolorableButton(this, GAME_WIDTH / 2 + 140, y - 8, 80, 30, 'Decline', COLORS.danger, async () => {
+            await this.networkSystem.declineFriendRequest(r.id);
+            this.cleanupOverlay(elements);
+            this.openFriendsMenu();
+          });
+          elements.push(declineBtn);
+        });
+        sectionY += pendingRequests.length * 40 + 20;
+      }
+
+      this.add.text(GAME_WIDTH / 2 - 150, sectionY, 'My Friends:', {
+        fontSize: '16px', color: '#4ecca3', fontFamily: 'Arial', fontStyle: 'bold',
+      }).setDepth(DEPTH.OVERLAY + 10);
+      sectionY += 30;
+
+      if (friendList.length === 0) {
+        this.add.text(GAME_WIDTH / 2, sectionY, 'No friends yet. Press "Add Friend" to find someone!', {
+          fontSize: '15px', color: '#888888', fontFamily: 'Arial',
+        }).setOrigin(0.5).setDepth(DEPTH.OVERLAY + 10);
+      } else {
+        friendList.forEach((f, i) => {
+          this.add.text(GAME_WIDTH / 2 - 150, sectionY + i * 35, `• ${f.username}`, {
+            fontSize: '16px', color: '#ffffff', fontFamily: 'Arial',
+          }).setDepth(DEPTH.OVERLAY + 10);
+        });
+      }
     }
 
-    const backBtn = new RecolorableButton(this, GAME_WIDTH / 2 - 80, GAME_HEIGHT - 80, 160, 45, 'Back', COLORS.danger, () => {
-      this.cleanupOverlay([overlay, titleText, backBtn]);
+    const backBtn = new RecolorableButton(this, GAME_WIDTH / 2 - 80, GAME_HEIGHT - 65, 160, 45, 'Back', COLORS.danger, () => {
+      this.cleanupOverlay(elements);
     });
+    elements.push(backBtn);
+  }
+
+  openAddFriend() {
+    const overlay = this.add.graphics().setDepth(DEPTH.OVERLAY);
+    overlay.fillStyle(0x0f0f23, 1);
+    overlay.fillRect(0, 0, GAME_WIDTH, GAME_HEIGHT);
+
+    const titleText = this.add.text(GAME_WIDTH / 2, 50, 'Add Friend', {
+      fontSize: '28px', color: '#ffffff', fontFamily: 'Arial', fontStyle: 'bold',
+    }).setOrigin(0.5).setDepth(DEPTH.OVERLAY + 10);
+
+    const hintText = this.add.text(GAME_WIDTH / 2, 100, 'Enter a username to search:', {
+      fontSize: '16px', color: '#aaaaaa', fontFamily: 'Arial',
+    }).setOrigin(0.5).setDepth(DEPTH.OVERLAY + 10);
+
+    const elements = [overlay, titleText, hintText];
+    let inputObj = null;
+
+    const x = GAME_WIDTH / 2 - 120;
+    const y = 135;
+    const w = 240;
+    const h = 35;
+
+    const bg = this.add.graphics().setDepth(DEPTH.OVERLAY + 10);
+    bg.fillStyle(0x2d2d44, 1);
+    bg.fillRoundedRect(x, y, w, h, 5);
+    bg.lineStyle(1, 0x555555, 1);
+    bg.strokeRoundedRect(x, y, w, h, 5);
+    elements.push(bg);
+
+    const text = this.add.text(x + 10, y + h / 2, '', {
+      fontSize: '16px', color: '#ffffff', fontFamily: 'Arial',
+    }).setOrigin(0, 0.5).setDepth(DEPTH.OVERLAY + 10);
+    elements.push(text);
+
+    const placeholderText = this.add.text(x + 10, y + h / 2, 'username', {
+      fontSize: '16px', color: '#555555', fontFamily: 'Arial',
+    }).setOrigin(0, 0.5).setDepth(DEPTH.OVERLAY + 10);
+    elements.push(placeholderText);
+
+    const statusText = this.add.text(GAME_WIDTH / 2, 195, '', {
+      fontSize: '14px', color: '#4ecca3', fontFamily: 'Arial',
+    }).setOrigin(0.5).setDepth(DEPTH.OVERLAY + 10);
+    elements.push(statusText);
+
+    inputObj = { bg, text, placeholderText, value: '', x, y, w, h, focused: false };
+
+    const zone = this.add.zone(x + w / 2, y + h / 2, w, h).setInteractive({ useHandCursor: true }).setDepth(DEPTH.OVERLAY + 10);
+    zone.on('pointerdown', () => {
+      inputObj.focused = true;
+      bg.clear();
+      bg.fillStyle(0x3d3d55, 1);
+      bg.fillRoundedRect(x, y, w, h, 5);
+      bg.lineStyle(2, 0x4ecca3, 1);
+      bg.strokeRoundedRect(x, y, w, h, 5);
+      this.currentInput = inputObj;
+    });
+    elements.push(zone);
+
+    const sendBtn = new RecolorableButton(this, GAME_WIDTH / 2 - 60, 220, 120, 40, 'Send Request', COLORS.buttonGreen, async () => {
+      const name = inputObj.value.trim();
+      if (!name) { statusText.setText('Enter a username'); return; }
+      statusText.setText('Searching...');
+      sendBtn.setDisabled(true);
+      const result = await this.networkSystem.sendFriendRequest(name);
+      if (result.success) {
+        statusText.setText('Friend request sent!');
+        inputObj.value = '';
+        text.setText('');
+        placeholderText.setVisible(true);
+      } else {
+        statusText.setText(result.error || 'Failed to send request');
+      }
+      sendBtn.setDisabled(false);
+    });
+    elements.push(sendBtn);
+
+    const keyboardHandler = (event) => {
+      if (!inputObj.focused) return;
+      if (event.key === 'Backspace') {
+        inputObj.value = inputObj.value.slice(0, -1);
+      } else if (event.key === 'Enter') {
+        inputObj.focused = false;
+        bg.clear();
+        bg.fillStyle(0x2d2d44, 1);
+        bg.fillRoundedRect(x, y, w, h, 5);
+        bg.lineStyle(1, 0x555555, 1);
+        bg.strokeRoundedRect(x, y, w, h, 5);
+        const name = inputObj.value.trim();
+        if (!name) { statusText.setText('Enter a username'); return; }
+        statusText.setText('Searching...');
+        sendBtn.setDisabled(true);
+        this.networkSystem.sendFriendRequest(name).then(result => {
+          if (result.success) {
+            statusText.setText('Friend request sent!');
+            inputObj.value = '';
+            text.setText('');
+            placeholderText.setVisible(true);
+          } else {
+            statusText.setText(result.error || 'Failed to send request');
+          }
+          sendBtn.setDisabled(false);
+        });
+        return;
+      } else if (event.key.length === 1) {
+        inputObj.value += event.key;
+      }
+      text.setText(inputObj.value);
+      placeholderText.setVisible(inputObj.value.length === 0);
+    };
+
+    this.input.keyboard.on('keydown', keyboardHandler);
+    elements.push({ destroy: () => this.input.keyboard.off('keydown', keyboardHandler) });
+
+    const backBtn = new RecolorableButton(this, GAME_WIDTH / 2 - 80, GAME_HEIGHT - 65, 160, 45, 'Back', COLORS.danger, () => {
+      this.input.keyboard.off('keydown', keyboardHandler);
+      this.cleanupOverlay(elements);
+      this.openFriendsMenu();
+    });
+    elements.push(backBtn);
   }
 
   showMessage(msg) {

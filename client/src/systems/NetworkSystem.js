@@ -168,33 +168,72 @@ export class NetworkSystem {
 
   async sendFriendRequest(username) {
     const { data: { user } } = await supabase.auth.getUser();
-    if (!user) return;
+    if (!user) return { success: false, error: 'Not signed in' };
 
-    const { data: targetUser } = await supabase
-      .from('users')
-      .select('id')
+    const { data: targetUsers, error: searchError } = await supabase
+      .from('profiles')
+      .select('id, username')
       .eq('username', username)
-      .single();
+      .limit(1);
 
-    if (!targetUser) return;
+    if (searchError) return { success: false, error: 'Search failed' };
+    if (!targetUsers || targetUsers.length === 0) return { success: false, error: 'User not found' };
 
-    await supabase.from('friend_requests').insert([{
+    const targetUser = targetUsers[0];
+    if (targetUser.id === user.id) return { success: false, error: 'Cannot add yourself' };
+
+    const { data: existing } = await supabase
+      .from('friend_requests')
+      .select('id, status')
+      .or(`and(from_user_id.eq.${user.id},to_user_id.eq.${targetUser.id}),and(from_user_id.eq.${targetUser.id},to_user_id.eq.${user.id})`)
+      .limit(1);
+
+    if (existing && existing.length > 0) {
+      if (existing[0].status === 'pending') return { success: false, error: 'Request already sent' };
+      if (existing[0].status === 'accepted') return { success: false, error: 'Already friends' };
+    }
+
+    const { error } = await supabase.from('friend_requests').insert([{
       from_user_id: user.id,
       to_user_id: targetUser.id,
       status: 'pending',
     }]);
+
+    if (error) return { success: false, error: error.message };
+    return { success: true };
   }
 
   async acceptFriendRequest(fromUserId) {
-    await supabase
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) return { success: false, error: 'Not signed in' };
+
+    const { error: updateError } = await supabase
       .from('friend_requests')
       .update({ status: 'accepted' })
       .eq('from_user_id', fromUserId)
-      .eq('to_user_id', (await supabase.auth.getUser()).data.user?.id);
+      .eq('to_user_id', user.id)
+      .eq('status', 'pending');
 
-    await supabase.from('friends').insert([
-      { user_id: fromUserId, friend_id: (await supabase.auth.getUser()).data.user?.id },
+    if (updateError) return { success: false, error: updateError.message };
+
+    const { error: insertError } = await supabase.from('friends').insert([
+      { user_id: fromUserId, friend_id: user.id },
     ]);
+
+    if (insertError) return { success: false, error: insertError.message };
+    return { success: true };
+  }
+
+  async declineFriendRequest(fromUserId) {
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) return;
+
+    await supabase
+      .from('friend_requests')
+      .update({ status: 'declined' })
+      .eq('from_user_id', fromUserId)
+      .eq('to_user_id', user.id)
+      .eq('status', 'pending');
   }
 
   async getFriends() {
@@ -203,12 +242,12 @@ export class NetworkSystem {
 
     const { data } = await supabase
       .from('friends')
-      .select('friend_id, users!friends_friend_id_fkey(username)')
+      .select('friend_id, profiles!friends_friend_id_fkey(username)')
       .eq('user_id', user.id);
 
     return (data || []).map(f => ({
       id: f.friend_id,
-      username: f.users?.username,
+      username: f.profiles?.username,
     }));
   }
 
@@ -218,13 +257,13 @@ export class NetworkSystem {
 
     const { data } = await supabase
       .from('friend_requests')
-      .select('from_user_id, users!friend_requests_from_user_id_fkey(username)')
+      .select('from_user_id, profiles!friend_requests_from_user_id_fkey(username)')
       .eq('to_user_id', user.id)
       .eq('status', 'pending');
 
     return (data || []).map(r => ({
       id: r.from_user_id,
-      username: r.users?.username,
+      username: r.profiles?.username,
     }));
   }
 
