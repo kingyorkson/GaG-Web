@@ -88,7 +88,7 @@ export class MenuScene extends Phaser.Scene {
 
     this.multiplayerBtn = new RecolorableButton(this, btnX, titleY + 175, btnW, btnH, 'Multiplayer', COLORS.buttonGray, () => {
       if (this.currentUser) {
-        this.scene.start('LoadingScene', { mode: 'multiplayer', user: this.currentUser });
+        this.openMultiplayerMenu();
       }
     });
     this.multiplayerBtn.setDisabled(true);
@@ -273,6 +273,44 @@ export class MenuScene extends Phaser.Scene {
     this.switchUser(null);
     this.updateUserUI();
     this.showMessage('Signed out');
+  }
+
+  openMultiplayerMenu() {
+    const overlay = this.add.graphics().setDepth(DEPTH.OVERLAY + 10);
+    overlay.fillStyle(0x000000, 0.8);
+    overlay.fillRect(0, 0, GAME_WIDTH, GAME_HEIGHT);
+
+    const pw = 350;
+    const ph = 300;
+    const px = (GAME_WIDTH - pw) / 2;
+    const py = (GAME_HEIGHT - ph) / 2;
+
+    const panel = this.add.graphics().setDepth(DEPTH.OVERLAY + 10);
+    panel.fillStyle(COLORS.tabletBg, 0.95);
+    panel.fillRoundedRect(px, py, pw, ph, 15);
+    panel.lineStyle(2, COLORS.tabletBorder, 1);
+    panel.strokeRoundedRect(px, py, pw, ph, 15);
+
+    const titleText = this.add.text(GAME_WIDTH / 2, py + 25, 'Multiplayer', {
+      fontSize: '22px', color: '#ffffff', fontFamily: 'Arial', fontStyle: 'bold',
+    }).setOrigin(0.5).setDepth(DEPTH.OVERLAY + 20);
+
+    const quickBtn = new RecolorableButton(this, px + 20, py + 70, pw - 40, 45, 'Quick Play', COLORS.buttonGreen, () => {
+      this.cleanupOverlay([overlay, panel, titleText, quickBtn, joinBtn, serversBtn, closeBtn]);
+      this.scene.start('LoadingScene', { mode: 'multiplayer', user: this.currentUser });
+    });
+
+    const joinBtn = new RecolorableButton(this, px + 20, py + 130, pw - 40, 45, 'Join Server', COLORS.buttonGray, () => {
+      this.showMessage('Enter a server ID to join');
+    });
+
+    const serversBtn = new RecolorableButton(this, px + 20, py + 190, pw - 40, 45, 'My Servers', COLORS.buttonGray, () => {
+      this.showMessage('Create and manage your servers');
+    });
+
+    const closeBtn = new RecolorableButton(this, px + pw - 50, py + 10, 35, 35, 'X', COLORS.danger, () => {
+      this.cleanupOverlay([overlay, panel, titleText, quickBtn, joinBtn, serversBtn, closeBtn]);
+    });
   }
 
   async openQRCodeModal() {
